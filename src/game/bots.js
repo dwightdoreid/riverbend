@@ -236,6 +236,34 @@ export const ENEMY_TYPES = {
       return [];
     },
   },
+  // Armoured tracked machine. Bullets barely scratch its front and sides; its glowing rear
+  // radiator is the weak spot. Heavy cannon. Flank it while someone draws its fire.
+  hauler: {
+    name: 'Hauler', hp: 620, color: 0x6b5f4c,
+    hover: 0, bob: .01, eyeY: 2.7, muzzle: [0, 2.35, -2.8], centerY: 1.4,
+    hitParts: [{ y: 1.4, r: 1.5, head: false }, { y: 1.3, r: 1.2, head: false, z: -1.5 }, { y: 1.3, r: 1.2, head: false, z: 1.5 }, { y: 2.55, r: .42, head: true, z: -.3 }],
+    speed: { patrol: 1, search: 1.4, close: 1.4, retreat: 1, strafe: .7 },
+    sight: { stand: 34, crouch: 26, crouchStill: 20, fov: .2 },
+    range: { far: 24, near: 8 }, strafeSwap: 3,
+    gun: { speed: 50, damage: 22, cooldown: [2.2, .6], spread: [.012, .15], sound: 'blast' },
+    armor(e, head, dir, explosive) {
+      if (explosive) return .5;
+      if (!dir) return .15;
+      const fwd = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw));
+      return dir.x * fwd.x + dir.z * fwd.z > .35 ? 1.6 : .15;     // round travelling the way it faces = hit in the back
+    },
+    build(g, bodyMat) {
+      box(g, 0, 1.1, 0, 2.6, 1.3, 4.6, bodyMat);
+      for (const s of [-1, 1]) { box(g, s * 1.45, .55, 0, .55, 1.1, 4.8, 'dark'); for (let z = -2; z <= 2; z += 1) { const w = cyl(g, s * 1.45, .55, z, .45, .45, .58, 'edge', 10); w.rotation.z = Math.PI / 2; } }
+      const plate = new THREE.MeshStandardMaterial({ color: 0x7a7468, metalness: .25, roughness: .55 });
+      box(g, 0, 1.25, -2.35, 2.5, 1.1, .2, plate); for (const s of [-1, 1]) box(g, s * 1.32, 1.3, 0, .1, .9, 4, plate);
+      box(g, 0, 2.25, -.3, 1.6, .8, 1.8, plate); rod(g, [0, 2.35, -1.2], [0, 2.35, -3.1], .14, 'dark', 10);
+      box(g, 0, 2.58, -1.22, .5, .12, .04, glowEye(0xffb24a, 0xff8a2a));
+      const rad = new THREE.MeshStandardMaterial({ color: 0xff9a4a, emissive: 0xff6a1a, emissiveIntensity: 1.8 });
+      box(g, 0, 1.3, 2.32, 1.8, .8, .06, rad); for (let x = -.75; x <= .75; x += .25) box(g, x, 1.3, 2.36, .06, .82, .04, 'dark');   // rear radiator: the weak spot
+      return [];
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,

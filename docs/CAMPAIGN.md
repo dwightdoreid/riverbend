@@ -149,5 +149,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 11 *Gale Line*: wind, lightning and rain, the ARC-3 carbine, and spinning turbines.
      - Done: 12 *Three-Way*: the uplink objective, relays that are knocked offline and rebooted, and three-way fights over the ridge.
      - Done: 13 *Static*: the EMP HUD with stereo objective pings, beacon landmarks, the Arc lobber and its electric fields, and EMP grenades.
-     - Next: 14 *Cold Iron*: a snowy freight yard, coupling battery cars under Hauler attack.
+     - Done: 14 *Cold Iron*: snow, the Hauler with its rear weak spot, and battery wagons shunted onto the train.
+     - Next: 15 *Black Box*: stealth infiltration of the Halvard office (Act III finale).
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

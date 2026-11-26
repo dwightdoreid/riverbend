@@ -7,15 +7,16 @@ import { block, addSolid } from '../game/world.js';
 
 export const TRACKS = [-24, -16, -8, 0, 8, 16, 24];
 
-export default {
-  id: 'railyard',
-  name: 'Port Calder Freight Yard',
-  bounds: { x: 44, z: 36 },
-  environment: { sky: '#d9a98a', fog: [60, 220], shadowExtent: 80, shadowFar: 240 },
+const yard = (id, name, snow, environment) => ({
+  id, name, bounds: { x: 44, z: 36 }, environment,
   menuCamera: { radius: 95, height: 60 },
   map: { min: [-46, -38], max: [46, 38], outline: [[-44, -36], [44, 36]], lineWidth: 2, lines: TRACKS.map(z => [-44, z, 44, z]) },
-  build,
-};
+  build: w => build(w, snow),
+});
+
+export default yard('railyard', 'Port Calder Freight Yard', false, { sky: '#d9a98a', fog: [60, 220], shadowExtent: 80, shadowFar: 240 });
+/** The same yard under snow, with some wagons moved off to leave the sidings clear (mission 14). */
+export const snowYard = yard('railyardSnow', 'Kelda Junction Freight Yard', true, { sky: '#c9d6e0', fog: [35, 170], shadowExtent: 80, shadowFar: 240 });
 
 function solid(w, x, y, z, wd, h, d, m) { box(w, x, y, z, wd, h, d, m); block(x, z, wd, d); addSolid(x - wd / 2, 0, z - d / 2, x + wd / 2, y + h / 2, z + d / 2); }
 
@@ -36,10 +37,10 @@ function containers(w, x, z, rows, cols, levels) {
   }
 }
 
-function build(w) {
+function build(w, snow = false) {
   setSeed(1010);
-  const ballast = new THREE.MeshStandardMaterial({ color: 0x7d746a, map: noiseTex([128, 120, 110], 55, [40, 40]), roughness: 1 });
-  const dirt = new THREE.MeshStandardMaterial({ color: 0x8c7b64, map: noiseTex([140, 124, 104], 35, [60, 60]), roughness: 1 });
+  const ballast = new THREE.MeshStandardMaterial({ color: snow ? 0xd8dde2 : 0x7d746a, map: noiseTex(snow ? [228, 232, 236] : [128, 120, 110], snow ? 22 : 55, [40, 40]), roughness: 1 });
+  const dirt = new THREE.MeshStandardMaterial({ color: snow ? 0xeef2f5 : 0x8c7b64, map: noiseTex(snow ? [240, 243, 246] : [140, 124, 104], snow ? 14 : 35, [60, 60]), roughness: 1 });
   box(w, 0, -.42, 0, 600, .6, 600, dirt).castShadow = false;
   box(w, 0, -.03, 0, 92, .2, 76, ballast).castShadow = false;
   for (const z of TRACKS) {
@@ -48,8 +49,13 @@ function build(w) {
   }
   // Freight wagons (cover). The middle of the yard (x -10..10, z -12..4) stays open.
   const tint = [0x7d4a3a, 0x47606e, 0x8a8268, 0x5b6b4d, 0x6d2f2f];
-  for (const [x, z] of [[-30, -24], [-16, -24], [22, -24], [35, -24], [-34, -16], [16, -16], [-24, 8], [28, 8], [-6, 16], [24, 16], [38, 24]]) wagon(w, x, z, tint[Math.floor(rand() * tint.length)]);
+  const wagons = snow ? [[-30, -24], [22, -24], [35, -24], [-34, -16], [16, -16], [-26, 8], [28, 8], [24, 16]] : [[-30, -24], [-16, -24], [22, -24], [35, -24], [-34, -16], [16, -16], [-24, 8], [28, 8], [-6, 16], [24, 16], [38, 24]];
+  for (const [x, z] of wagons) { wagon(w, x, z, tint[Math.floor(rand() * tint.length)]); if (snow) box(w, x, 3.5, z, 11, .18, 3, 'white'); }
   containers(w, 22, -34, 1, 3, 3); containers(w, -40, 30, 2, 1, 2); containers(w, 30, 30, 2, 2, 2);
+  if (snow) {                                           // snow caps and drifts
+    for (const [x, z, n] of [[22, -34, 3], [-40, 30, 1], [30, 30, 2]]) for (let c = 0; c < n; c++) box(w, x + c * 6.4, 7.9, z, 6.2, .2, 2.5, 'white');
+    for (let i = 0; i < 40; i++) { const d = box(w, (rand() - .5) * 86, .15, (rand() - .5) * 70, 2 + rand() * 4, .3, 1 + rand() * 2, 'white'); d.rotation.y = rand() * 3; d.castShadow = false; }
+  }
   // Gantry crane spanning the yard.
   for (const z of [-33, 33]) for (const x of [9, 15]) { box(w, x, 8, z, .8, 16, .8, 'amber'); block(x, z, .8, .8); addSolid(x - .4, 0, z - .4, x + .4, 16, z + .4); }
   for (const x of [9, 15]) box(w, x, 16.3, 0, .9, .9, 67, 'amber');

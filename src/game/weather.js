@@ -29,7 +29,13 @@ let rain = null, flashLeft = 0, baseHemi = null;
 export function setupWeather() {
   rain = null; flashLeft = 0; baseHemi = null;
   G.strikes = []; G.nextStrike = (cfg()?.lightning?.every?.[0] ?? 8);
-  if (cfg()?.rain) {
+  if (cfg()?.snow) {
+    const N = 1600, pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) pos.set([(Math.random() - .5) * 60, Math.random() * 24, (Math.random() - .5) * 60], i * 3);
+    const geom = new THREE.BufferGeometry(); geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    rain = new THREE.Points(geom, new THREE.PointsMaterial({ color: 0xffffff, size: .09, transparent: true, opacity: .85 }));
+    rain.userData.snow = true; rain.frustumCulled = false; G.dynRoot.add(rain);
+  } else if (cfg()?.rain) {
     const N = 1400, pos = new Float32Array(N * 6);
     for (let i = 0; i < N; i++) { const x = (Math.random() - .5) * 60, y = Math.random() * 26, z = (Math.random() - .5) * 60; pos.set([x, y, z, x, y - .7, z], i * 6); }
     const geom = new THREE.BufferGeometry(); geom.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -72,7 +78,15 @@ export function flash(strength = .6) {
 export function updateWeather(dt) {
   const c = cfg();
   // Rain falls with the wind and follows the camera.
-  if (rain && G.local) {
+  if (rain?.userData.snow && G.local) {
+    const w = windVec(), arr = rain.geometry.attributes.position.array, t = G.elapsed;
+    for (let i = 0; i < arr.length; i += 3) {
+      arr[i + 1] -= 1.6 * dt; arr[i] += (w.x * .3 + Math.sin(t + i) * .4) * dt; arr[i + 2] += (w.z * .3 + Math.cos(t * .7 + i) * .4) * dt;
+      if (arr[i + 1] < 0) { arr[i] = (Math.random() - .5) * 60; arr[i + 1] = 22 + Math.random() * 3; arr[i + 2] = (Math.random() - .5) * 60; }
+    }
+    rain.geometry.attributes.position.needsUpdate = true;
+    rain.position.set(G.local.pos.x, 0, G.local.pos.z);
+  } else if (rain && G.local) {
     const w = windVec(), arr = rain.geometry.attributes.position.array;
     for (let i = 0; i < arr.length; i += 6) {
       arr[i + 1] -= 22 * dt; arr[i] += w.x * dt * .6; arr[i + 2] += w.z * dt * .6;

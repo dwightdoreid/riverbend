@@ -349,6 +349,41 @@ const PROP_TYPES = {
     };
   },
 
+  // Battery wagon. Style 'parked' or 'coupled'; once coupled it is shunted along to def.to and
+  // joins the train (sliding at 3 m/s; restored checkpoints snap straight there).
+  battery(parent, def) {
+    const root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g);
+    const paint = new THREE.MeshStandardMaterial({ color: 0x2f5a7a, roughness: .6 });
+    box(g, 0, .9, 0, 11, .3, 2.6, 'edge');
+    for (const x of [-3.3, 0, 3.3]) { box(g, x, 1.9, 0, 2.9, 1.7, 2.3, paint); box(g, x, 2.85, 0, 2.95, .1, 2.35, 'white'); }
+    const leds = [];
+    for (const x of [-3.3, 0, 3.3]) { const l = box(g, x, 2.2, 1.17, .5, .12, .03, emissive(0x5fb4ff, 1.4)); leds.push(l); }
+    for (const dx of [-4, 4]) for (const s of [-1, 1]) { const w = cyl(g, dx, .42, s * .72, .4, .4, .2, 'dark', 10); w.rotation.x = Math.PI / 2; }
+    box(g, 5.3, 1.2, 1.2, .5, .9, .5, 'amber');                                           // coupler cabinet
+    const at = new THREE.Vector3(def.at[0], 0, def.at[1]), to = new THREE.Vector3(...(def.to ? [def.to[0], 0, def.to[1]] : [def.at[0], 0, def.at[1]]));
+    const circles = [-4.5, -1.5, 1.5, 4.5].map(() => ({ x: 0, z: 0, r: 1.35 })), box3 = new THREE.Box3();
+    const mover = addMover({ circles, box: box3 });
+    const place = p => {
+      g.position.copy(p); prop.pos.set(p.x, 1.2, p.z + 2.2);
+      [-4.5, -1.5, 1.5, 4.5].forEach((o, i) => { circles[i].x = p.x + o; circles[i].z = p.z; });
+      box3.min.set(p.x - 5.5, 0, p.z - 1.3); box3.max.set(p.x + 5.5, 3, p.z + 1.3);
+    };
+    let last = 0;
+    const prop = {
+      root, mover, pos: new THREE.Vector3(),
+      setStyle(s) { if (s === 'coupled' && G.status !== 'playing') place(to); for (const l of leds) l.material.emissive.setHex(s === 'coupled' ? 0x5ce08a : 0x5fb4ff); },
+      update(t) {
+        const dt = Math.min(.6, Math.max(0, t - last)); last = t;      // generous cap: keeps pace at low frame rates
+        if (prop.style !== 'coupled' || g.position.distanceTo(to) < .02) return;
+        const step = to.clone().sub(g.position), d = step.length();
+        place(g.position.clone().addScaledVector(step.normalize(), Math.min(d, 3 * dt)));
+      },
+    };
+    place(at);
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -397,7 +432,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked' };
 
 export function spawnProps(defs) {
   G.props = {};

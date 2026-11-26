@@ -679,6 +679,48 @@ async function mission13() {
   document.body.classList.remove('emp');
 }
 
+async function mission14() {
+  await goNext(14);
+  check('mission 14: snowbound yard', S().status === 'briefing' && S().mission === 'm14' && G.level.id === 'railyardSnow' && G.env.sky === '#c9d6e0', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+
+  // Hauler armour: front and sides barely scratched; the rear radiator takes heavy damage.
+  const h = G.enemies.find(e => e.type.name === 'Hauler'), fwd = new THREE.Vector3(-Math.sin(h.yaw), 0, -Math.cos(h.yaw));
+  let hp = h.hp; damageEnemy(h, 100, false, G.local, { dir: fwd.clone().negate() });
+  check('Hauler front armour: 15%', Math.abs((hp - h.hp) - 15) < .01, (hp - h.hp).toFixed(1));
+  hp = h.hp; damageEnemy(h, 100, false, G.local, { dir: fwd.clone() });
+  check('Hauler rear radiator: 160%', Math.abs((hp - h.hp) - 160) < .01, (hp - h.hp).toFixed(1));
+  G.simSteps = 0;
+  const back = h.pos.clone().addScaledVector(fwd, -9).setY(1.4), aim = h.pos.clone().setY(1.3);
+  hp = h.hp; projectile(back, aim.clone().sub(back).normalize(), 240, 31, G.local);
+  G.simSteps = 1; await frames(4); G.simSteps = 6;
+  check('a bullet from behind hits the radiator for full damage', Math.abs((hp - h.hp) - 31 * 1.6) < .5, (hp - h.hp).toFixed(1));
+
+  const bats = ['batA', 'batB', 'batC'].map(id => G.props[id]);
+  const start = bats[0].pos.clone();
+  teleport(bats[0].pos.x, bats[0].pos.z + 1.5); await holdE(2.7);
+  await waitSim(1.5);
+  check('a coupled wagon is shunted toward the train', bats[0].style === 'coupled' && bats[0].pos.distanceTo(start) > 2, bats[0].pos.distanceTo(start).toFixed(1) + ' m');
+  for (const b of bats.slice(1)) { teleport(b.pos.x, b.pos.z + 1.5); await holdE(2.7); }
+  check('all three coupled -> checkpoint', S().objective === 1 && G.checkpoint?.name === 'Batteries coupled', S().objective);
+  G.simSteps = 10; await waitSim(14); G.simSteps = 6;
+  const at = id => { const d = G.mission.props.find(q => q.id === id).to; return Math.hypot(G.props[id].pos.x - d[0], G.props[id].pos.z - 2.2 - d[1]); };
+  check('wagons reach their slots behind the loco', ['batA', 'batB', 'batC'].every(id => at(id) < .1), ['batA', 'batB', 'batC'].map(id => at(id).toFixed(2)).join(','));
+
+  // Retry from the checkpoint: the wagons are already in place.
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  check('death after coupling', S().status === 'lost', S().status);
+  await click('retryBtn'); godMode(); await frames(3);
+  check('retry: wagons already coupled behind the loco', S().objective === 1 && ['batA', 'batB', 'batC'].every(id => at(id) < .1), ['batA', 'batB', 'batC'].map(id => at(id).toFixed(2)).join(','));
+
+  teleport(-38, 28.6); await holdE(2.3);
+  check('locomotive started -> hold', S().objective === 2 && G.checkpoint?.name === 'Loco started', S().objective);
+  G.objState.hold = 15.1; await waitSim(.3);
+  check('Tallymen wave during the hold', G.fired.has('tally-wave'));
+  G.objState.hold = 44.8; await waitSim(3);
+  check('train rolls -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -686,7 +728,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -710,6 +752,7 @@ async function run() {
   await mission11();
   await mission12();
   await mission13();
+  await mission14();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
