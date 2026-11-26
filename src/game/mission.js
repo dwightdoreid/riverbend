@@ -12,6 +12,7 @@ import { spawnProps, spawnPickups, repairProp } from './props.js';
 import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
 import { clearBossFx } from './bosses.js';
 import { resetBlackout, updateBlackout } from './blackout.js';
+import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './switching.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive, clearSmokes } from './combat.js';
@@ -72,6 +73,7 @@ export function prepareMission(mission, checkpoint = null) {
   G.objective = 0; G.objState = freshObjState(); G.objStartRan = false; G.missionStartRan = false;
   spawnProps(mission.props);
   setupEscort(mission.escort);
+  setupSwitching();
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
   G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0; });
@@ -185,6 +187,7 @@ export function objectiveText() {
     const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
     sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
   }
+  if (o.type === 'switching') sub = Object.keys(G.mission.switching.breakers).map(id => id + (isClosed(id) ? ' ●' : ' ○')).join('   ') + (o.sub ? ' · ' + o.sub : '');
   if (o.timeLimit) {
     const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
     sub = '⏱ ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + (sub ? ' · ' + sub : '');
@@ -248,6 +251,8 @@ export function updateObjective(dt) {
       G.objState.hold += dt;
       if (G.objState.hold >= o.time) completeObjective(inside[0]);
     }
+  } else if (o.type === 'switching') {
+    if (goalReached()) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'survive') {
     G.objState.hold += dt;
     if (G.objState.hold >= o.time) completeObjective(alive[0] ?? G.local);
@@ -321,6 +326,7 @@ const CONDITIONS = {
   near: ([prop, r]) => G.players.some(p => isActive(p) && flat(p.pos, posOf(prop)) < r),
   hold: t => ['hold', 'survive'].includes(currentObjective()?.type) && G.objState.hold >= t,
   destroyed: ([ids, n]) => ids.filter(id => G.props[id]?.style === 'wrecked').length >= n,
+  breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
   collected: n => G.objState.collected.size >= n,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
   escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,
@@ -390,6 +396,10 @@ function interactionCandidate(p) {
     if (q !== p && q.downed && flat(q.pos, p.pos) < 2.2) return { type: 'revive', obj: q, name: 'Revive ' + q.name, time: 3 };
   }
   const o = currentObjective(), kind = o?.type ?? 'interact';
+  if (kind === 'switching') {
+    const id = breakerNear(p, o.reach ?? 2.6);
+    if (id) return { type: 'breaker', obj: id, name: (isClosed(id) ? 'Open' : 'Close') + ' breaker ' + id, time: o.time ?? 1.4 };
+  }
   if (o && (kind === 'interact' || kind === 'collect')) {
     for (const id of objectiveTargets(o)) {
       if (flat(p.pos, posOf(id)) < (o.reach ?? 2.6)) return { type: 'objective', obj: id, name: o.action, time: o.time };
@@ -419,6 +429,7 @@ export function updateInteract(p, dt) {
   if (p.interactTime < c.time) return;
   p.interactTime = 0;
   if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
+  if (c.type === 'breaker') { operate(c.obj, p); updateHUD(); return; }
   if (c.type === 'repair') { repairProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' patched ' + (c.obj.label ?? 'equipment')); return; }
   if (c.type === 'objective') {
     if (currentObjective().type === 'collect') collectTarget(p, c.obj); else completeObjective(p);

@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 119 scripted solo checks (missions 01–07) in headless Chrome
+python3 tools/smoke_test.py                  # 130 scripted solo checks (missions 01–08) in headless Chrome
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
@@ -59,11 +59,12 @@ src/
     avatars.js        teammates' bodies and name tags
     turrets.js        deployable auto-turrets
     blackout.js       rolling-blackout districts (lit/dark schedule, visibility)
+    switching.js      breaker puzzle: live zones, interlocks, arc flash
     bosses.js         boss enemy types (Spillway Warden), mortar shells and warning rings
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso) and reusable pieces (kit.js).
                       Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
@@ -79,11 +80,12 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **level**: an id from `src/levels/index.js`. **environment**: `day`, `dusk`, `night`, `storm` or `underground` (`ENV_PRESETS` in `engine/render.js`).
 - **blackout**: `{ period, litFraction, offsets: { districtId: seconds } }` runs rolling blackouts on levels that define districts (Port Calder). Lit districts expose players; dark ones hide them.
 - **reinforcements**: `[[x, z]...]`, the points Spotters call Skimmers from.
+- **switching**: `{ breakers: { id: { panel, feeds } }, zones: { name: { rect } }, interlocks: [{ close, whileClosed, hint }], goal: { id: closed }, dps }`. Breakers are panel props (`style: 'on'` = closed). Closed breakers energize their zones, which hurt players and machines. Closing a breaker against an interlock causes an arc flash.
 - **smokes**: smoke grenades per player (V). The cloud blocks machines' line of sight.
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade`, `door` (`open` clears it), `drive`, `payphone`, `cable` and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
@@ -97,6 +99,7 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - `reach`: get within `radius` of the target.
 - `hold`: stay within `radius` for `time` seconds while waves come in.
 - `eliminate`: destroy every machine.
+- `switching`: operate the mission's breakers (hold E at a panel) until the `goal` state is reached.
 - `kill`: destroy the enemies with a given `tag`, such as a boss. The objective marker follows them.
 - `survive`: last `time` seconds anywhere. With `guard: [propIds]`, the objective box shows those props' health.
 - `escort`: drive the mission's escort vehicle up to waypoint `until`. It moves only while a player is within `radius` and no machine is within `contactRadius`.
@@ -107,7 +110,7 @@ Each objective can have `onStart` and `onComplete` events.
 
 **Events** (`{ do: ..., ... }`): `say`, `radio`, `feed`, `noise`, `investigate`, `propStyle`, `spawn` (enemy waves), `checkpoint`, `giveTurrets`, `wait`, `win` and `fail`. New ones go in the `EVENTS` table in `game/mission.js`.
 
-**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n`, `enemiesLeft: n`, `escort: waypointIndex` and `destroyed: [[propIds], n]`. `hold` also counts time in `survive` objectives.
+**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n`, `enemiesLeft: n`, `escort: waypointIndex`, `destroyed: [[propIds], n]` and `breaker: [id, closed]`. `hold` also counts time in `survive` objectives.
 
 ## Co-op (1–4 players)
 

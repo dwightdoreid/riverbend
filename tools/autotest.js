@@ -7,6 +7,7 @@ import { hurt, projectile, damageEnemy, smokeBlocks } from '../src/game/combat.j
 import { litAt, damageProp } from '../src/game/props.js';
 import { canvas, flashlight, camera } from '../src/engine/render.js';
 import { updateBlackout, districtLit } from '../src/game/blackout.js';
+import { liveAt } from '../src/game/switching.js';
 
 const log = [], errors = [];
 window.autotestLog = log;
@@ -404,6 +405,41 @@ async function mission07() {
   check('reach exit shaft -> mission won', S().status === 'won', S().status);
 }
 
+async function mission08() {
+  await click('nextBtn');
+  check('next mission -> 08 briefing', S().status === 'briefing' && S().mission === 'm08', S().mission);
+  await click('startBtn'); godMode();
+  const V = (x, z) => new THREE.Vector3(x, 0, z);
+  check('initial state: west + north live, east + south dead', liveAt(V(-25, 0)) && liveAt(V(0, -12)) && !liveAt(V(25, 0)) && !liveAt(V(0, 12)));
+
+  // Live sections hurt players (with a HUD warning) and fry machines.
+  await waitSim(Math.max(0, G.protectUntil - G.elapsed) + .2);   // past spawn protection
+  let dmg0 = G.local.stats.damage;
+  teleport(-25, 0); await waitSim(.8);
+  check('standing in a live section hurts', G.local.stats.damage > dmg0 && document.getElementById('liveWarn').classList.contains('on'), 'dmg=' + (G.local.stats.damage - dmg0).toFixed(0));
+  const laneBot = G.enemies[0];
+  laneBot.pos.set(-25, 0, 8); laneBot.home.copy(laneBot.pos); laneBot.patrol.set(-25, 0, 12); laneBot.dest.copy(laneBot.patrol); laneBot.memory = 0; laneBot.state = 'patrol';
+  await waitSim(1.5);
+  check('machines in live sections take damage', laneBot.hp < laneBot.maxHp || laneBot.dead, laneBot.hp.toFixed(0) + '/' + laneBot.maxHp);
+
+  // Interlock: closing B while A is still closed = arc flash, B trips back open.
+  teleport(12, -21.6); dmg0 = G.local.stats.damage; await holdE(1.6);
+  check('unsafe close -> arc flash, breaker trips', G.props.panelB.style === 'off' && G.local.stats.damage - dmg0 >= 30 && G.messages.some(m => /FAULT/.test(m.text)), 'B=' + G.props.panelB.style + ' dmg=' + (G.local.stats.damage - dmg0).toFixed(0));
+
+  // Safe order: open A, open C, close D, close B.
+  teleport(-12, -21.6); await holdE(1.6);
+  check('open A -> west lane dead', G.props.panelA.style === 'off' && !liveAt(V(-25, 0)) && G.fired.has('a-open'));
+  check('objective shows breaker states', /A ○/.test(document.getElementById('objectiveSub').textContent) && /C ●/.test(document.getElementById('objectiveSub').textContent), document.getElementById('objectiveSub').textContent);
+  teleport(-23, 22.4); await holdE(1.6);
+  check('open C -> north strip dead', G.props.panelC.style === 'off' && !liveAt(V(0, -12)) && G.fired.has('c-open'));
+  teleport(13, 24.4); await holdE(1.6);
+  check('close D -> south strip live', G.props.panelD.style === 'on' && liveAt(V(0, 12)));
+  teleport(12, -21.6); await holdE(1.6); await waitSim(.4);
+  check('close B -> Feeder 7 routed + checkpoint', S().objective === 1 && G.checkpoint?.name === 'Feeder routed' && liveAt(V(25, 0)), S().objective + ' ' + G.checkpoint?.name);
+  G.objState.hold = 39.7; teleport(-8, 2); await waitSim(3);
+  check('hold while Feeder 7 syncs -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -416,6 +452,7 @@ async function run() {
   await mission05();
   await mission06();
   await mission07();
+  await mission08();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

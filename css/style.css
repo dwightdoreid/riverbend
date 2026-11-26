@@ -67,3 +67,7 @@
 #scope::before,#scope::after{content:'';position:absolute;left:50%;top:50%;background:#0b1114cc}
 #scope::before{width:62vmin;height:1px;transform:translate(-50%,-50%)}
 #scope::after{width:1px;height:62vmin;transform:translate(-50%,-50%)}
+
+/* Standing in an energized zone */
+#liveWarn{position:absolute;inset:0;display:none;box-shadow:inset 0 0 140px #5fb4ffaa;color:#cfe8ff;font-size:13px;letter-spacing:3px;font-weight:700;text-align:center;padding-top:22vh;text-shadow:0 0 12px #5fb4ff}
+#liveWarn.on{display:block}

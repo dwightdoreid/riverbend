@@ -73,7 +73,7 @@ function build(w) {
 
   // A few real lights at junctions (fixed count for the level).
   for (const [x, z] of [[-31, 28], [0, 28], [31, 28], [-31, 0], [0, 0], [31, -31], [-31, -31], [20, -18]]) {
-    const l = new THREE.PointLight(0xd8ecff, 22, 16, 1.6); l.position.set(x, H - .4, z); w.add(l);
+    const l = new THREE.PointLight(0xd8ecff, 18, 11, 1.8); l.position.set(x, H - .4, z); w.add(l);   // tight pools, dark between
   }
 
   // Flooded tunnel: water surface, a drip of rubble, warning sign.

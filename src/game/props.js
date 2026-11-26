@@ -207,6 +207,38 @@ const PROP_TYPES = {
     };
   },
 
+  // Station mimic board: a live one-line diagram of the mission's breakers and feeder.
+  mimic(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
+    const c = document.createElement('canvas'); c.width = 512; c.height = 256;
+    const ctx = c.getContext('2d'), tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    for (const dx of [-1.7, 1.7]) box(g, dx, 1.1, 0, .14, 2.2, .14, 'steel');
+    box(g, 0, 2.2, 0, 3.6, 2, .12, 'dark');
+    box(g, 0, 2.2, -.07, 3.4, 1.7, .02, new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: .8 }));
+    let sig = '';
+    const draw = () => {
+      const sw = G.mission?.switching; if (!sw) return;
+      const ids = Object.keys(sw.breakers), closed = id => G.props[sw.breakers[id].panel]?.style === 'on';
+      const next = ids.map(id => closed(id) ? 1 : 0).join('');
+      if (next === sig) return; sig = next;
+      ctx.fillStyle = '#0d1b21'; ctx.fillRect(0, 0, 512, 256);
+      ctx.fillStyle = '#e9efe4'; ctx.font = 'bold 22px sans-serif'; ctx.fillText(def.title ?? 'STATION MIMIC', 18, 32);
+      ids.forEach((id, i) => {
+        const bx = 30 + i * 120, on = closed(id);
+        ctx.strokeStyle = '#7f98a3'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx + 30, 60); ctx.lineTo(bx + 30, 200); ctx.stroke();
+        ctx.fillStyle = on ? '#e0503a' : '#3fb06a'; ctx.fillRect(bx + 10, 105, 40, 40);
+        ctx.fillStyle = '#0d1b21'; ctx.font = 'bold 24px sans-serif'; ctx.fillText(id, bx + 22, 133);
+        ctx.fillStyle = on ? '#ff9a7a' : '#9fd6ae'; ctx.font = '15px sans-serif'; ctx.fillText(on ? 'CLOSED' : 'OPEN', bx + 4, 172);
+        ctx.fillStyle = '#b8cac7'; ctx.fillText('→ ' + sw.breakers[id].feeds, bx + 4, 222);
+      });
+      const live = Object.entries(sw.goal).every(([id, want]) => closed(id) === want);
+      ctx.fillStyle = live ? '#f3ba65' : '#7f98a3'; ctx.font = 'bold 18px sans-serif'; ctx.fillText((def.feeder ?? 'FEEDER') + (live ? ' · LIVE' : ' · DEAD'), 300, 32);
+      tex.needsUpdate = true;
+    };
+    return { root, pos: new THREE.Vector3(x, 1.4, z), setStyle() {}, update() { draw(); } };
+  },
+
   // Invisible point used as an objective target (reach / hold objectives).
   marker(parent, def) {
     const root = new THREE.Group(); parent.add(root);
@@ -240,7 +272,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle' };
 
 export function spawnProps(defs) {
   G.props = {};

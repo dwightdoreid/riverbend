@@ -17,6 +17,7 @@ import { updateAvatars } from './game/avatars.js';
 import { updateTurrets } from './game/turrets.js';
 import { updateShells, updateMarkers } from './game/bosses.js';
 import { updateBlackout } from './game/blackout.js';
+import { updateSwitching } from './game/switching.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -55,6 +56,7 @@ function step(dt) {
   updateTurrets(dt);
   updateBlackout();
   updateSmokes(dt);
+  updateSwitching(dt);
   updateShells(dt);
   updateMarkers(dt);
   updateProjectiles(dt);
@@ -78,6 +80,7 @@ function clientStep(dt) {
   updateMarkers(dt);
   updateBlackout();
   updateSmokes(dt);
+  updateSwitching(dt);
 }
 
 let last = performance.now();

@@ -142,5 +142,6 @@ There are 13 environments, and some are reused with different lighting or layout
    - **In progress: Act II, *Load Shed*, in Port Calder.**
      - Done: 06 *Brownout*: rolling blackouts, the Spotter, the DMR-14, and Juno's evidence.
      - Done: 07 *Undercurrent*: tunnels, Lineman ceiling ambushes, smoke grenades, flooded zones and a timed escape.
-     - Next: 08 *Live Wire*: switching-station breaker puzzle and energized zones.
+     - Done: 08 *Live Wire*: the switching puzzle with interlocks and arc flash, live zones that hurt machines too, and the mimic board.
+     - Next: 09 *Last Train*: power the elevated line and defend the stalled commuter train.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

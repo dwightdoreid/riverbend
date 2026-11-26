@@ -36,7 +36,9 @@ export const ENV_PRESETS = {
   },
   // Below ground: no sky or sun; level lights and the flashlight do the work.
   underground: {
-    sky: '#06090b', fog: [10, 48], hemi: [0x9aaab6, 0x5a6268, 2.6], exposure: 1.2,
+    // Tuned by measurement: unlit rooms ~8/255 (shapes just visible), lit junction pools ~45, and the
+    // flashlight adds +40-50, so it matters (the night yard in mission 02 sits at ~15).
+    sky: '#06090b', fog: [10, 48], hemi: [0x9aaab6, 0x5a6268, .55], exposure: 1.2,
     sun: { color: 0x000000, intensity: 0, pos: [0, 60, 0] }, dark: true, sightScale: .6,
   },
   dusk: {
