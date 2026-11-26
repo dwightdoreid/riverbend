@@ -119,6 +119,140 @@ ENEMY_TYPES.warden = {
   },
 };
 
+// Ironwalker: a construction walker LODESTAR has taken over.
+//  - Its armour shrugs off almost everything. Destroy both glowing knee actuators to bring it
+//    down: it kneels and its core is exposed for a few seconds.
+//  - Then it repairs its knees (to 60%), stands back up and fights harder (phase 2, 3...).
+//  - Rivet-gun bursts, thrown debris (warning rings) and a stomp against anyone too close.
+//  - It also shoots at Halvard's Tallymen when they get in its way.
+const KNEE = 420;
+function kneeDown(e, id) {
+  const side = id === 'kneeL' ? -1 : 1;
+  const at = e.pos.clone().add(new THREE.Vector3(side * 1.7, 0, -.3).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw)).setY(2.7);
+  explosionFx(at); fxAll({ t: 'boom', p: [r2(at.x), r2(at.y), r2(at.z)] });
+  feed((side < 0 ? 'Left' : 'Right') + ' knee actuator destroyed');
+  if (Object.values(e.knees).every(h => h <= 0)) {
+    e.kneeling = true; e.exposed = true; e.kneelTimer = e.phase >= 3 ? 7 : 9;
+    radio('Mara · Ops', 'It\'s down! The core is open. Pour everything into it!');
+  }
+}
+
+ENEMY_TYPES.ironwalker = {
+  name: 'Ironwalker', boss: true, hp: 3200, color: 0xd9a23a, weakLabel: 'CORE EXPOSED',
+  hover: 0, bob: .02, eyeY: 6.2, muzzle: [2.2, 5.4, -1.8], centerY: 5.2,
+  hitParts: [
+    { y: 5.4, r: 2.1, head: false },
+    { y: 5.0, r: .75, head: true, z: -2.35 },
+    { id: 'kneeL', y: 2.7, r: .85, x: -1.7, z: -.3 },
+    { id: 'kneeR', y: 2.7, r: .85, x: 1.7, z: -.3 },
+  ],
+  speed: { patrol: .9, search: .9, close: .9, retreat: .9, strafe: .9 },
+  sight: { stand: 70, crouch: 70, crouchStill: 70, fov: -1 },
+  range: { far: 99, near: 0 }, strafeSwap: 4,
+  gun: { speed: 60, damage: 9, cooldown: [.11, 0], spread: [.014, .2], sound: 'shot' },
+
+  status: e => e.kneeling ? '' : ' · knees ' + Object.values(e.knees ?? { a: 1, b: 1 }).filter(h => h > 0).length + '/2',
+  partAlive: (e, id) => (e.knees?.[id] ?? 1) > 0,
+  onHit(e, amount, opts, head) {
+    e.knees ??= { kneeL: KNEE, kneeR: KNEE };
+    if (e.kneeling) return opts.explosive ? amount * .6 : amount * (head ? 2.2 : 1);
+    if (opts.part && e.knees[opts.part] > 0) {
+      e.knees[opts.part] -= amount;
+      if (e.knees[opts.part] <= 0) kneeDown(e, opts.part);
+      return 'absorbed';
+    }
+    if (opts.explosive) {
+      for (const id of Object.keys(e.knees)) if (e.knees[id] > 0) { e.knees[id] -= amount * .35; if (e.knees[id] <= 0) kneeDown(e, id); }
+      return 'absorbed';
+    }
+    return amount * .04;                                  // the armour plating
+  },
+
+  build(g, bodyMat) {
+    const hazard = new THREE.MeshStandardMaterial({ color: 0x24282a, roughness: .7 });
+    const kneeMat = () => new THREE.MeshStandardMaterial({ color: 0xffb24a, emissive: 0xff8a1a, emissiveIntensity: 1.6 });
+    const core = new THREE.MeshStandardMaterial({ color: 0xffd08a, emissive: 0xff9a3a, emissiveIntensity: .3 });
+    g.userData.knees = {};
+    for (const s of [-1, 1]) {
+      rod(g, [s * 1.5, 4.4, .3], [s * 1.7, 2.7, -.3], .38, 'edge', 10);         // thigh
+      rod(g, [s * 1.7, 2.7, -.3], [s * 1.6, .5, .5], .32, 'edge', 10);          // shin
+      box(g, s * 1.6, .25, .2, 1.3, .5, 2.2, 'dark');                           // foot
+      const k = kneeMat(); mesh(g, geo('sphere', .62, 12, 10), k, s * 1.7, 2.7, -.3); g.userData.knees[s < 0 ? 'kneeL' : 'kneeR'] = k;
+    }
+    box(g, 0, 5.4, 0, 4, 2.6, 3.6, bodyMat);
+    for (let i = -1.6; i <= 1.6; i += .8) box(g, i, 4.15, -1.81, .4, .3, .04, hazard);   // hazard stripes
+    box(g, 0, 5.4, -1.83, 2.2, 1.4, .1, 'glass');
+    mesh(g, geo('sphere', .7, 14, 10), core, 0, 5.0, -2.0); g.userData.core = core;
+    box(g, 0, 6.85, .4, 2.6, .3, 2.4, 'edge');
+    rod(g, [0, 6.9, 1.2], [0, 11.5, -3.8], .3, bodyMat, 8);                     // crane boom
+    rod(g, [0, 11.5, -3.8], [0, 8.4, -4.2], .05, 'steel', 5); box(g, 0, 8.2, -4.2, .8, .5, .5, 'dark');   // hook block
+    rod(g, [2.2, 5.4, -.4], [2.2, 5.4, -2.2], .22, 'dark', 10); box(g, 2.2, 5.4, -.2, .7, .7, 1, 'edge');    // rivet gun
+    for (const s of [-1, 1]) box(g, s * 1.2, 6.9, 1.6, .3, .3, .3, new THREE.MeshStandardMaterial({ color: 0xffb24a, emissive: 0xff8a1a, emissiveIntensity: 2 }));
+    return [];
+  },
+
+  pose(e, dt) {
+    e.drop = THREE.MathUtils.damp(e.drop ?? 0, e.exposed ? 2.2 : 0, 3, dt ?? .016);
+    e.g.position.y -= e.drop;
+    const k = e.g.userData.knees ?? {};
+    for (const id of ['kneeL', 'kneeR']) if (k[id]) k[id].emissiveIntensity = (e.knees?.[id] ?? 1) > 0 ? 1.2 + Math.sin(G.elapsed * 5) * .5 : 0;
+    if (e.g.userData.core) e.g.userData.core.emissiveIntensity = e.exposed ? 3 + Math.sin(G.elapsed * 14) : .3;
+  },
+
+  update(e, dt, from) {
+    if (isClient()) return;
+    e.knees ??= { kneeL: KNEE, kneeR: KNEE }; e.phase ??= 1;
+    if (e.kneeling) {
+      e.state = 'search';
+      e.kneelTimer -= dt;
+      if (e.kneelTimer <= 0) {
+        e.kneeling = false; e.exposed = false; e.phase++;
+        e.knees = { kneeL: KNEE * .6, kneeR: KNEE * .6 };
+        radio('Mara · Ops', e.phase >= 3 ? 'It\'s back up, and it\'s furious. Same again: knees, then core.' : 'It\'s patched its knees and it\'s standing. Knees again!');
+        for (const at of [[-20, -30], [20, -30]]) addEnemy({ type: 'lineman', at }, e.pos.clone());
+        e.stompCd = 0;
+      }
+      return;
+    }
+    // Nearest visible target: players first-class, Tallymen too.
+    let target = null, best = Infinity;
+    for (const p of [...G.players.filter(isActive), ...G.enemies.filter(o => !o.dead && o.faction !== e.faction)]) {
+      const eye = p.isEnemy ? p.pos.clone().setY(p.type.centerY) : eyeOf(p), d = p.pos.distanceTo(e.pos);
+      if (d < best && los(from, eye)) { target = p; best = d; }
+    }
+    e.visible = !!target; e.state = target ? 'engage' : 'search';
+    if (target) { e.target = target; e.seenAt = G.elapsed; }
+    const chase = target ?? G.players.find(isActive);
+    if (chase) {
+      e.yaw = Math.atan2(-(chase.pos.x - e.pos.x), -(chase.pos.z - e.pos.z));
+      if (best > 13) botMove(e, chase.pos, e.type.speed.close + .2 * (e.phase - 1), dt);
+      e.yaw = Math.atan2(-(chase.pos.x - e.pos.x), -(chase.pos.z - e.pos.z));
+    }
+    // Rivet-gun bursts.
+    e.burstTimer = (e.burstTimer ?? 2.5) - dt;
+    if (e.burstTimer <= 0 && target) { e.burstLeft = e.phase >= 3 ? 9 : 6; e.burstTimer = e.phase >= 3 ? 2.6 : 3.4; }
+    if (e.burstLeft > 0 && target && e.shot <= 0 && G.elapsed > G.protectUntil + .5) {
+      const aim = target.isEnemy ? target.pos.clone().setY(target.type.centerY) : eyeOf(target).add(new THREE.Vector3(0, -.3, 0));
+      shootAt(e, aim, best); e.shot = .11; e.burstLeft--;
+    }
+    // Thrown debris at players.
+    e.mortarTimer = (e.mortarTimer ?? 4) - dt;
+    if (e.mortarTimer <= 0) {
+      e.mortarTimer = e.phase >= 2 ? 5 : 6.5;
+      const victims = G.players.filter(isActive);
+      if (victims.length) { const v = victims[Math.floor(Math.random() * victims.length)]; launchShell(e.pos.clone().add(new THREE.Vector3(0, 8, 0)), v.pos.clone()); }
+    }
+    // Stomp anyone underfoot.
+    e.stompCd = (e.stompCd ?? 2) - dt;
+    if (e.stompCd <= 0 && G.players.some(p => isActive(p) && p.pos.distanceTo(e.pos) < 6.5)) {
+      e.stompCd = 3.2;
+      const at = e.pos.clone().setY(.3); explosionFx(at); fxAll({ t: 'boom', p: [r2(at.x), .3, r2(at.z)] });
+      for (const p of G.players) if (isActive(p)) { const d = p.pos.distanceTo(e.pos); if (d < 6.5) hurt(p, 12 + 26 * (1 - d / 6.5), at); }
+      feed('Ironwalker stomps!');
+    }
+  },
+};
+
 // ---------------------------------------------------------------- mortar shells and warning rings
 
 const FLIGHT = 1.5, GRAVITY = 12, BLAST = 4.5;

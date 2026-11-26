@@ -128,7 +128,8 @@ export function updateUI(dt) {
   const boss = G.enemies.find(e => e.type.boss && !e.dead);
   $('bossBar').classList.toggle('on', !!boss);
   if (boss) {
-    $('bossName').textContent = boss.type.name;
+    $('bossName').textContent = boss.type.name + (boss.type.status?.(boss) ?? '');
+    $('bossBar').dataset.weak = boss.type.weakLabel ?? 'VENTS OPEN';
     $('bossFill').style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
     $('bossBar').classList.toggle('exposed', !!boss.exposed);
   }

@@ -279,6 +279,21 @@ const PROP_TYPES = {
     return { root, pos: new THREE.Vector3(x, 1.4, z), setStyle() {}, update() { draw(); } };
   },
 
+  // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
+  lever(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    box(root, x, .45, z, .5, .9, .5, 'dark'); box(root, x, .95, z, .7, .12, .7, 'edge');
+    const arm = new THREE.Group(); arm.position.set(x, 1, z); root.add(arm);
+    rod(arm, [0, 0, 0], [0, 1.1, 0], .05, 'steel', 6); box(arm, 0, 1.15, 0, .16, .16, .16, 'red');
+    const lamp = box(root, x + .3, .8, z, .12, .12, .12, emissive(0xffb24a, 1.6));
+    const states = { normal: emissive(0xffb24a, 1.6), reverse: emissive(0x5ce08a, 1.8) };
+    return {
+      root, pos: new THREE.Vector3(x, 1, z),
+      setStyle(s) { arm.rotation.z = s === 'reverse' ? -.7 : .7; lamp.material = states[s] ?? states.normal; },
+      update() {},
+    };
+  },
+
   // Invisible point used as an objective target (reach / hold objectives).
   marker(parent, def) {
     const root = new THREE.Group(); parent.add(root);
@@ -312,7 +327,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal' };
 
 export function spawnProps(defs) {
   G.props = {};

@@ -8,5 +8,6 @@ import m06 from './m06_brownout.js';
 import m07 from './m07_undercurrent.js';
 import m08 from './m08_live_wire.js';
 import m09 from './m09_last_train.js';
+import m10 from './m10_ironwalker.js';
 
-export const CAMPAIGN = [m01, m02, m03, m04, m05, m06, m07, m08, m09];
+export const CAMPAIGN = [m01, m02, m03, m04, m05, m06, m07, m08, m09, m10];

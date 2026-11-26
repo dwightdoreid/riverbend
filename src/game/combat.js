@@ -17,13 +17,14 @@ const r2 = v => Math.round(v * 100) / 100;
 
 /** owner: the player who fired, or null for hostile (enemy) fire.
  *  visual: a client-side copy that only draws (the host decides what real shots hit). */
-export function projectile(origin, dir, speed, damage, owner = null, visual = false, echoOwner = false) {
+/** src: the machine that fired (its faction decides which machines the round can hit). */
+export function projectile(origin, dir, speed, damage, owner = null, visual = false, echoOwner = false, src = null) {
   const hostile = !owner;
   // The shooter's own browser already drew its shot, so it is skipped unless echoOwner (turrets).
   if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1 }, owner && !owner.local && !echoOwner ? owner.id : null);
   const m = new THREE.Mesh(geo('sphere', .035, 5, 4), hostile ? hostileMat : bulletMat);
   m.position.copy(origin); G.dynRoot.add(m);
-  G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, life: 1.6, mesh: m });
+  G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, src, faction: src?.faction ?? 'lodestar', life: 1.6, mesh: m });
 }
 
 export function alertNoise(pos, r) {
@@ -36,6 +37,14 @@ export function alertNoise(pos, r) {
 /** opts.dir: bullet direction (for shields); opts.explosive: grenade/blast damage. */
 export function damageEnemy(e, amount, head = false, attacker = null, opts = {}) {
   if (e.dead) return;
+  // Machine-on-machine fire (factions): retaliate against the shooter.
+  if (opts.by && !opts.by.dead) { e.target = opts.by; e.state = 'engage'; e.memory = 7; e.lastKnown.copy(opts.by.pos); }
+  // Weak-point hook: a boss can route damage to a part's own health instead of its main health.
+  if (e.type.onHit) {
+    const rest = e.type.onHit(e, amount, opts, head);
+    if (rest === 'absorbed') { if (attacker?.local) { showHit(false); sound('hit', .6); } else if (attacker) fxTo(attacker.id, { t: 'hit', kill: false }); return; }
+    amount = rest;
+  }
   // Armour hook: shields and boss plating scale damage by hit location and direction.
   if (e.type.armor) amount *= e.type.armor(e, head, opts.dir ?? null, !!opts.explosive);
   if (amount <= 0) {
@@ -139,17 +148,21 @@ export function updateProjectiles(dt) {
     const wall = castSolid(p.pos, dir, distance);
     let nearest = wall ? wall.distance : distance + .01, victim = null, head = false;
     testRay.set(p.pos, dir);
-    if (!p.hostile) {
+    let part = null;
+    {
       for (const e of G.enemies) {
-        if (e.dead) continue;
-        for (const part of e.type.hitParts) {
-          tmp.set(0, 0, part.z ?? 0).applyAxisAngle(UP, e.yaw).add(e.pos); tmp.y = e.elev > 1 ? e.elev - part.y : part.y + (e.elev ?? 0);   // a Lineman on the ceiling hangs upside down
-          sphere.set(tmp, part.r);
+        if (e.dead || (p.hostile && (e.faction === p.faction || e === p.src))) continue;
+        for (const pt of e.type.hitParts) {
+          if (pt.id && e.type.partAlive && !e.type.partAlive(e, pt.id)) continue;      // destroyed weak point
+          tmp.set(pt.x ?? 0, 0, pt.z ?? 0).applyAxisAngle(UP, e.yaw).add(e.pos);
+          tmp.y = e.elev > 1 ? e.elev - pt.y : pt.y + (e.elev ?? 0) - (pt.id ? 0 : e.drop ?? 0);   // ceiling Linemen hang upside down; kneeling bosses drop
+          sphere.set(tmp, pt.r);
           const hit = testRay.intersectSphere(sphere, new THREE.Vector3());
-          if (hit) { const d = hit.distanceTo(p.pos); if (d < nearest && d <= distance) { nearest = d; victim = e; head = part.head; } }
+          if (hit) { const d = hit.distanceTo(p.pos); if (d < nearest && d <= distance) { nearest = d; victim = e; head = pt.head; part = pt; } }
         }
       }
-    } else {
+    }
+    if (p.hostile) {
       for (const pl of G.players) {
         if (!isActive(pl)) continue;
         sphere.set(tmp.set(pl.pos.x, pl.eye * .66, pl.pos.z), pl.crouched ? .53 : .67);
@@ -160,8 +173,9 @@ export function updateProjectiles(dt) {
     if (victim || wall) {
       const h = p.pos.clone().addScaledVector(dir, nearest);
       if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
+      else if (p.hostile && victim?.isEnemy) damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, null, { dir, by: p.src, part: part?.id });
       else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
-      else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir }); burst(h, 0xd7c599, 4, 1.3); }
+      else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir, part: part?.id }); burst(h, 0xd7c599, 4, 1.3); }
       else { impact(wall.point); if (wall.mover?.onHit && !p.visual) wall.mover.onHit(p.damage, p.hostile); }
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
     }

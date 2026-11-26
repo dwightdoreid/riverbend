@@ -327,6 +327,7 @@ const CONDITIONS = {
   hold: t => ['hold', 'survive'].includes(currentObjective()?.type) && G.objState.hold >= t,
   destroyed: ([ids, n]) => ids.filter(id => G.props[id]?.style === 'wrecked').length >= n,
   breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
+  enemyHp: ([tag, frac]) => G.enemies.some(e => e.def.tag === tag && (e.dead || e.hp <= e.maxHp * frac)),
   collected: n => G.objState.collected.size >= n,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
   escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,

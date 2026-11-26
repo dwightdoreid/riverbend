@@ -54,7 +54,7 @@
 #bossBar .bar{height:7px;margin-top:5px;background:#0e1d24cc;border:1px solid #ffffff30;border-radius:4px;overflow:hidden}
 #bossBar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#c2502f,#f48c72);transition:width .2s}
 #bossBar.exposed i{background:linear-gradient(90deg,#f3ba65,#ffe1a0)}
-#bossBar.exposed b::after{content:' · VENTS OPEN';color:var(--amber)}
+#bossBar.exposed b::after{content:' · ' attr(data-weak);color:var(--amber)}
 
 /* Rolling-blackout readout */
 #gridPill{display:none;font-weight:650;color:#9fb6c8}

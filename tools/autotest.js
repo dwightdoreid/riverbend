@@ -8,6 +8,7 @@ import { litAt, damageProp } from '../src/game/props.js';
 import { canvas, flashlight, camera } from '../src/engine/render.js';
 import { updateBlackout, districtLit } from '../src/game/blackout.js';
 import { liveAt } from '../src/game/switching.js';
+import { addEnemy } from '../src/game/bots.js';
 
 const log = [], errors = [];
 window.autotestLog = log;
@@ -471,6 +472,57 @@ async function mission09() {
   G.simSteps = 6;
 }
 
+async function mission10() {
+  await click('nextBtn');
+  check('next mission -> 10 briefing', S().status === 'briefing' && S().mission === 'm10', S().mission);
+  check('freight yard level', G.level.id === 'railyard');
+  await click('startBtn'); godMode();
+
+  // Factions: a Tallyman and a LODESTAR sentry fight each other with no player involved.
+  teleport(-40, 34);
+  const tm = addEnemy({ type: 'tallyman', at: [0, -10] }), sn = addEnemy({ type: 'sentry', at: [0, 4] });
+  tm.yaw = Math.PI; sn.yaw = 0; tm.memory = sn.memory = 0;
+  await waitSim(Math.max(0, G.protectUntil + .6 - G.elapsed));
+  await waitSim(5);
+  check('Tallymen and LODESTAR machines fight each other', (tm.hp < tm.maxHp || tm.dead) && (sn.hp < sn.maxHp || sn.dead), 'tallyman ' + tm.hp.toFixed(0) + '/' + tm.maxHp + ' sentry ' + sn.hp.toFixed(0) + '/' + sn.maxHp);
+  damageEnemy(tm, 999, false, G.local); damageEnemy(sn, 999, false, G.local);
+
+  teleport(-30, 22.6); await holdE(1.7); teleport(-20, 14.1); await holdE(1.7);
+  check('points thrown -> checkpoint + Ironwalker', S().objective === 1 && G.checkpoint?.name === 'Points set' && G.props.leverA.style === 'reverse', S().objective);
+  const iw = G.enemies.find(e => e.def.tag === 'ironwalker');
+  check('Ironwalker spawns with a boss bar', !!iw && iw.hp === iw.maxHp);
+
+  let hp = iw.hp; damageEnemy(iw, 100, false, G.local, {});
+  check('armour: body hits do 4%', Math.abs((hp - iw.hp) - 4) < .01, (hp - iw.hp).toFixed(2));
+
+  // A real bullet at the left knee hits the knee (absorbed into its own health).
+  G.simSteps = 0;
+  const kneeAt = iw.pos.clone().add(new THREE.Vector3(-1.7, 0, -.3).applyAxisAngle(new THREE.Vector3(0, 1, 0), iw.yaw)).setY(2.7);
+  const from = kneeAt.clone().add(new THREE.Vector3(-Math.sin(iw.yaw), 0, -Math.cos(iw.yaw)).multiplyScalar(6));
+  hp = iw.hp; projectile(from, kneeAt.clone().sub(from).normalize(), 240, 31, G.local);
+  G.simSteps = 1; await frames(3); G.simSteps = 6;
+  check('bullets hit the knee actuators', iw.knees.kneeL < 420 && iw.hp === hp, 'kneeL=' + iw.knees.kneeL.toFixed(0));
+
+  damageEnemy(iw, 999, false, G.local, { part: 'kneeL' }); damageEnemy(iw, 999, false, G.local, { part: 'kneeR' });
+  await frames(3);
+  check('both knees down -> kneels, core exposed', iw.kneeling && iw.exposed && document.getElementById('bossBar').classList.contains('exposed') && document.getElementById('bossBar').dataset.weak === 'CORE EXPOSED');
+  hp = iw.hp; damageEnemy(iw, 100, true, G.local, {});
+  check('exposed core takes heavy damage', Math.abs((hp - iw.hp) - 220) < .01, (hp - iw.hp).toFixed(1));
+
+  const n0 = G.enemies.length; iw.kneelTimer = .01; await waitSim(.4);
+  check('stands back up: phase 2, knees patched, Linemen called', !iw.kneeling && iw.phase === 2 && iw.knees.kneeL > 0 && G.enemies.length === n0 + 2, 'phase=' + iw.phase);
+
+  iw.hp = iw.maxHp * .65; await waitSim(.5);
+  check('Tallymen enter at 70% boss health', G.fired.has('tallymen') && G.enemies.filter(e => e.def.tag === 'tallyman').length === 4);
+
+  damageEnemy(iw, 999, false, G.local, { part: 'kneeL' }); damageEnemy(iw, 999, false, G.local, { part: 'kneeR' });
+  damageEnemy(iw, 1e6, true, G.local, {}); await waitSim(.5);
+  check('Ironwalker destroyed -> clear the Tallymen', S().objective === 2 && G.checkpoint?.name === 'Ironwalker down', S().objective);
+  for (const e of G.enemies) if (e.def.tag === 'tallyman') damageEnemy(e, 1e6, false, G.local);
+  await waitSim(6);
+  check('Tallymen cleared -> Act II complete', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -485,6 +537,7 @@ async function run() {
   await mission07();
   await mission08();
   await mission09();
+  await mission10();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

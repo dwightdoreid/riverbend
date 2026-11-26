@@ -192,6 +192,26 @@ export const ENEMY_TYPES = {
       }
     },
   },
+  // Halvard Energy security drone: a second hostile faction. Shoots players and LODESTAR's
+  // machines alike, in accurate three-round bursts, and flanks.
+  tallyman: {
+    name: 'Tallyman', faction: 'halvard', hp: 120, color: 0xe3e6e8,
+    hover: 1.1, bob: .06, eyeY: 2.35, muzzle: [.48, 1.95, -.45], centerY: 1.9,
+    hitParts: [{ y: 1.9, r: .62, head: false }, { y: 2.45, r: .26, head: true, z: -.15 }],
+    speed: { patrol: 1.8, search: 3, close: 3.2, retreat: 2.4, strafe: 2.7 },
+    sight: { stand: 36, crouch: 28, crouchStill: 20, fov: .1 },
+    range: { far: 22, near: 9 }, strafeSwap: 1.4,
+    gun: { speed: 62, damage: 8, cooldown: [1.3, .5], spread: [.01, .12], sound: 'pistol', burst: 3 },
+    build(g, bodyMat) {
+      box(g, 0, 1.9, 0, .8, .9, .7, bodyMat); box(g, 0, 1.45, .05, .6, .25, .55, 'dark');
+      box(g, 0, 1.9, .01, .82, .14, .72, new THREE.MeshStandardMaterial({ color: 0x2f6fb0, roughness: .5 }));   // Halvard blue band
+      box(g, 0, 2.45, -.1, .42, .3, .42, bodyMat);
+      box(g, 0, 2.47, -.32, .32, .08, .03, glowEye(0x9fd6ff, 0x4fb4ff));
+      for (const s of [-1, 1]) { box(g, s * .5, 1.95, -.15, .16, .22, .7, 'dark'); rod(g, [s * .5, 1.95, -.5], [s * .5, 1.95, -.8], .04, 'steel', 6); }
+      box(g, 0, 1.25, .2, .4, .1, .3, glowEye(0x9fd6ff, 0x4fb4ff));                        // thruster
+      return [];
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,
@@ -236,7 +256,7 @@ export function addEnemy(def, alertAt = null) {
   const cone = G.env.dark ? makeCone(T) : null; if (cone) g.add(cone);
   const home = freePoint(...def.at), patrol = freePoint(...(def.patrol ?? def.at));
   const e = {
-    id: i, def, type: T, g, mat: bodyMat, rotors, cone, pos: home.clone(), home, patrol, dest: patrol.clone(),
+    id: i, def, type: T, isEnemy: true, faction: def.faction ?? T.faction ?? 'lodestar', g, mat: bodyMat, rotors, cone, pos: home.clone(), home, patrol, dest: patrol.clone(),
     hp: T.hp * hpScale(), maxHp: T.hp * hpScale(), yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,
     shot: 1 + i * .17, sense: i * .027, visible: false, seenAt: -99, flash: 0, dead: false, dodge: i % 2 ? 1 : -1, target: null,
   };
@@ -296,6 +316,11 @@ export function nearestPlayer(pos) {
 
 const flatDist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
+// Targets are players or machines of another faction (Halvard's Tallymen vs LODESTAR's machines).
+export const isTargetAlive = t => t.isEnemy ? !t.dead : isActive(t);
+export const targetEye = t => t.isEnemy ? t.pos.clone().setY(t.type.centerY) : eyeOf(t);
+function hostileMachines(e) { return G.enemies.filter(o => !o.dead && o !== e && o.faction !== e.faction); }
+
 /** Line of fire to a point inside an object's own collision box (truck, generator, turret):
  *  hitting that object's box counts as a clear shot. */
 export function canHit(from, to, mover) {
@@ -324,14 +349,22 @@ export function shootAt(e, aim, dist) {
   const origin = e.pos.clone().add(new THREE.Vector3(m[0], m[1], m[2]).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw));
   const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
   aim.x += (Math.random() - .5) * inaccuracy * 2; aim.y += (Math.random() - .5) * inaccuracy;
-  projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null);
+  projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null, false, false, e);
   e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
+  if (T.gun.burst) {                                       // short bursts (Tallymen)
+    e.gunBurst = (e.gunBurst ?? T.gun.burst) - 1;
+    if (e.gunBurst > 0) e.shot = .12; else e.gunBurst = T.gun.burst;
+  }
   sfxAt(e.pos, T.gun.sound, .1, 100, .2);
 }
 
 /** Distance at which enemy e can see player p right now, or -1 if it can't. */
 function canSee(e, from, p) {
-  const to = eyeOf(p), dist = from.distanceTo(to), t = e.type.sight;
+  const to = targetEye(p), dist = from.distanceTo(to), t = e.type.sight;
+  if (p.isEnemy) {                                        // a machine of the other faction
+    const aware = e.state === 'engage' || e.memory > 0 || (to.clone().sub(from).normalize().dot(new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw))) > t.fov);
+    return dist < t.stand && aware && los(from, to) && !smokeBlocks(from, to) ? dist : -1;
+  }
   const exposed = p.flashlight || litAt(p.pos);           // light makes you visible in the dark
   const scale = exposed ? 1 : (G.env.sightScale ?? 1);
   const reach = (p.crouched && !p.moving ? t.crouchStill : p.crouched ? t.crouch : t.stand) * scale;
@@ -349,7 +382,7 @@ export function updateBots(dt) {
     const T = e.type;
     e.shot -= dt; e.memory = Math.max(0, e.memory - dt);
     e.mat.emissive.setHex(e.flash > 0 ? 0x9c532c : 0x000000);
-    if (e.target && !isActive(e.target)) { e.target = null; e.visible = false; }
+    if (e.target && !isTargetAlive(e.target)) { e.target = null; e.visible = false; }
     const from = e.pos.clone().add(new THREE.Vector3(0, T.eyeY, 0));
     if (T.update) { T.update(e, dt, from); poseEnemy(e, dt); continue; }   // bosses run their own logic
 
@@ -358,15 +391,14 @@ export function updateBots(dt) {
       e.sense = .21;
       // Keep the current target while it stays visible; otherwise pick the nearest visible player.
       let best = null, bestD = Infinity;
-      for (const p of G.players) {
-        if (!isActive(p)) continue;
+      for (const p of [...G.players.filter(isActive), ...hostileMachines(e)]) {
         const d = canSee(e, from, p);
         const score = p === e.target ? -1 : d;
         if (d >= 0 && score < bestD) { best = p; bestD = score; }
       }
       e.visible = !!best;
       if (best) {
-        if (e.state !== 'engage') { e.shot = Math.max(e.shot, .85); feed(T.name + ' acquired ' + (best.local ? 'your' : best.name + "'s") + ' position.'); }
+        if (e.state !== 'engage') { e.shot = Math.max(e.shot, .85); if (!best.isEnemy) feed(T.name + ' acquired ' + (best.local ? 'your' : best.name + "'s") + ' position.'); }
         e.state = 'engage'; e.target = best; e.lastKnown.copy(best.pos); e.memory = 7; e.seenAt = G.elapsed;
       } else if (e.state === 'engage') { e.state = 'search'; e.memory = Math.max(3, e.memory); }
     }
@@ -378,7 +410,7 @@ export function updateBots(dt) {
 
     const t = e.target;
     if (e.state === 'engage' && e.visible && t) {
-      const eye = eyeOf(t), dist = from.distanceTo(eye);
+      const eye = targetEye(t), dist = from.distanceTo(eye);
       const face = () => { e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z)); };
       face();
       if (dist > T.range.far) navigate(e, t.pos, T.speed.close, dt);
