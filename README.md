@@ -19,8 +19,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 55 scripted solo checks (missions 01–03) in headless Chrome
-python3 tools/coop_test.py                   # 32 co-op checks: host + client windows
+python3 tools/smoke_test.py                  # 73 scripted solo checks (missions 01–04) in headless Chrome
+python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
 
@@ -57,10 +57,11 @@ src/
     viewmodel.js      first-person camera and held weapon
     nav.js            walkability grid + A* pathfinding for machines
     avatars.js        teammates' bodies and name tags
+    turrets.js        deployable auto-turrets
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend.js, switchback.js) and reusable pieces (kit.js)
+  levels/             level geometry (riverbend, switchback, fernhill) and reusable pieces (kit.js)
   missions/           mission definitions plus the campaign order (index.js)
 tools/                smoke_test.py (solo), coop_test.py (two-browser co-op)
 substation_fps.html   the original single-file version, kept for reference
@@ -72,9 +73,11 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 
 **Mission-level fields**
 - **level**: an id from `src/levels/index.js`. **environment**: `day`, `dusk`, `night` or `storm` (`ENV_PRESETS` in `engine/render.js`).
+- **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck` and `barricade`. Each has a `style` that events can change (`gone` removes a truck or barricade).
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck` and `barricade`. Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
 - **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`). With `harass: propId`, an enemy attacks that prop when no player is in sight.
@@ -87,14 +90,15 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - `reach`: get within `radius` of the target.
 - `hold`: stay within `radius` for `time` seconds while waves come in.
 - `eliminate`: destroy every machine.
+- `survive`: last `time` seconds anywhere. With `guard: [propIds]`, the objective box shows those props' health.
 - `escort`: drive the mission's escort vehicle up to waypoint `until`. It moves only while a player is within `radius` and no machine is within `contactRadius`.
 - Any objective can set `reach` to change the interact distance (default 2.6 m).
 
 Each objective can have `onStart` and `onComplete` events.
 
-**Events** (`{ do: ..., ... }`): `say`, `radio`, `feed`, `noise`, `investigate`, `propStyle`, `spawn` (enemy waves), `checkpoint`, `wait`, `win` and `fail`. New ones go in the `EVENTS` table in `game/mission.js`.
+**Events** (`{ do: ..., ... }`): `say`, `radio`, `feed`, `noise`, `investigate`, `propStyle`, `spawn` (enemy waves), `checkpoint`, `giveTurrets`, `wait`, `win` and `fail`. New ones go in the `EVENTS` table in `game/mission.js`.
 
-**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n`, `enemiesLeft: n` and `escort: waypointIndex`.
+**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n`, `enemiesLeft: n`, `escort: waypointIndex` and `destroyed: [[propIds], n]`. `hold` also counts time in `survive` objectives.
 
 ## Co-op (1–4 players)
 
@@ -116,8 +120,8 @@ Each objective can have `onStart` and `onComplete` events.
 - Some strict networks (symmetric NAT, some corporate or mobile networks) block direct WebRTC connections. Fixing that needs a TURN relay server, which isn't set up.
 - Clients are trusted with their own position and ammo. That's fine for friends, but it isn't cheat-proof.
 
-**Testing co-op on one machine:** open two tabs with `index.html?net=local`. They connect through the browser itself, with no internet needed. `python3 tools/coop_test.py` does this automatically and runs 32 checks covering:
+**Testing co-op on one machine:** open two tabs with `index.html?net=local`. They connect through the browser itself, with no internet needed. `python3 tools/coop_test.py` does this automatically and runs 36 checks covering:
 - lobby, deploy, and position sync both ways
 - client shots, damage, downed and revive
-- objectives, waves and grenades
+- objectives, waves, grenades, turrets and generator health
 - mission end, next mission, leaving, and dropping in at a checkpoint

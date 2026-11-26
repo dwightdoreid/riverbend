@@ -4,6 +4,8 @@ import { THREE } from '../engine/three.js';
 import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
 import { G } from './state.js';
 import { addMover } from './world.js';
+import { burst } from './combat.js';
+import { runEvents } from './mission.js';
 
 const emissive = (color, intensity = 1) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: .5 });
 
@@ -141,18 +143,50 @@ const PROP_TYPES = {
       update() {},
     };
   },
+
+  // Diesel generator set. Styles: 'running' (green lamp, exhaust shimmer), 'tripped', 'wrecked'.
+  generator(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
+    const paint = new THREE.MeshStandardMaterial({ color: 0x3f6b5c, roughness: .6, metalness: .35 });
+    const burnt = new THREE.MeshStandardMaterial({ color: 0x2a2624, roughness: .95 });
+    const lamps = { running: emissive(0x5ce08a, 1.6), tripped: emissive(0xf3b13a, 1.6), wrecked: emissive(0x401010, .2) };
+    box(g, 0, .2, 0, 7.6, .4, 3, 'concrete');
+    const body = box(g, 0, 1.6, 0, 7, 2.4, 2.6, paint);
+    box(g, 0, 2.86, 0, 7.1, .12, 2.7, 'edge');
+    for (let i = -3; i <= 3; i++) box(g, i * .9, 1.6, 1.31, .5, 1.9, .04, 'dark');               // louvres
+    box(g, 3.2, 1.6, 0, .6, 2, 2.2, 'steel');                                                    // radiator end
+    for (const sx of [-2.2, -1.4]) cyl(g, sx, 3.6, -.6, .14, .14, 1.5, 'dark', 8);                 // exhaust stacks
+    const lamp = box(g, -3.2, 2.5, 1.33, .2, .2, .05, lamps.running);
+    box(g, -2.4, 2.2, 1.33, 1, .5, .04, 'white');
+    const fx = Math.cos(def.yaw ?? 0), fz = -Math.sin(def.yaw ?? 0);
+    const circles = [-2.6, -.9, .9, 2.6].map(o => ({ x: x + fx * o, z: z + fz * o, r: 1.35 }));
+    const ex = Math.abs(fx) * 3.6 + Math.abs(fz) * 1.4, ez = Math.abs(fz) * 3.6 + Math.abs(fx) * 1.4;
+    const mover = addMover({ circles, box: new THREE.Box3(new THREE.Vector3(x - ex, 0, z - ez), new THREE.Vector3(x + ex, 2.9, z + ez)) });
+    return {
+      root, mover, pos: new THREE.Vector3(x, 1.6, z),
+      setStyle(s) { lamp.material = lamps[s] ?? lamps.running; body.material = s === 'wrecked' ? burnt : paint; },
+      update(t, i) { if (this.style === 'running') lamp.material.emissiveIntensity = 1.2 + Math.sin(t * 2 + i) * .4; },
+    };
+  },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running' };
 
 export function spawnProps(defs) {
   G.props = {};
   for (const def of defs) {
-    const p = Object.assign(PROP_TYPES[def.type](G.dynRoot, def), { id: def.id, type: def.type });
+    const p = Object.assign(PROP_TYPES[def.type](G.dynRoot, def), { id: def.id, type: def.type, label: def.label });
     const setStyle = p.setStyle;
     p.setStyle = s => { p.style = s; setStyle(s); };
     p.setStyle(def.style ?? DEFAULT_STYLE[def.type]);
     G.props[def.id] = p;
+    // Props with health (generators...) take damage from machine fire and can be repaired.
+    if (def.hp) {
+      p.maxHp = p.hp = def.hp * (1 + .3 * (G.players.length - 1));
+      p.repairable = def.repairable ?? true;
+      p.mover.onHit = (dmg, hostile) => { if (hostile) damageProp(p, dmg); };
+    }
   }
 }
 
@@ -176,4 +210,19 @@ export function spawnPickups(defs) {
     else for (const dx of [-.3, .3]) box(g, x + dx, .5, z + .39, .07, .7, .03, 'amber');
     return { g, pos: new THREE.Vector3(x, .8, z), type, used: false };
   });
+}
+
+export function damageProp(p, dmg) {
+  if (!p.hp || p.style === 'wrecked' || G.status !== 'playing') return;
+  p.hp = Math.max(0, p.hp - dmg);
+  if (p.hp > 0) return;
+  p.setStyle('wrecked');
+  burst(p.pos.clone().setY(2.4), 0x55504a, 30, 5);
+  const def = G.mission.props.find(d => d.id === p.id);
+  runEvents(def.onDestroyed ?? [{ do: 'feed', text: (def.label ?? p.id) + ' destroyed' }]);
+}
+
+export function repairProp(p, fraction = .25) {
+  if (!p.hp || p.style === 'wrecked') return;
+  p.hp = Math.min(p.maxHp, p.hp + p.maxHp * fraction);
 }

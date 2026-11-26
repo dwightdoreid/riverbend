@@ -14,6 +14,7 @@ import { updateCamera, updateViewModel } from './game/viewmodel.js';
 import { updateUI, drawMap, updateMarker } from './ui/hud.js';
 import { setupCoopPanel } from './ui/menu.js';
 import { updateAvatars } from './game/avatars.js';
+import { updateTurrets } from './game/turrets.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -49,6 +50,7 @@ function step(dt) {
   updateRemotePlayers();
   updateDowned(dt);
   updateBots(dt);
+  updateTurrets(dt);
   updateProjectiles(dt);
   updateBombs(dt);
   updateEffects(dt);

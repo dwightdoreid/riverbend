@@ -16,6 +16,8 @@ import { projectile, burst, explosionFx, alertNoise } from '../game/combat.js';
 import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
 import { poseEscort } from '../game/mission.js';
+import { makeTurret, syncTurretVisuals } from '../game/turrets.js';
+import { updateHUD } from '../ui/hud.js';
 import { say, feed, radio, showHit, showDamage } from '../ui/hud.js';
 import { openTransport, randomCode } from './transport.js';
 
@@ -131,6 +133,8 @@ function onClientConnected(conn) {
       p.stats.grenades++;
       spawnBomb(new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), p);
       alertNoise(p.pos, 8);
+    } else if (m.t === 'deploy' && p && p.alive && !p.downed && p.turrets > 0) {
+      p.turrets--; makeTurret({ owner: p, x: m.x, z: m.z, yaw: m.y }); feed(p.name + ' deployed a turret');
     } else if (m.t === 'bye') conn.close();
   });
   conn.onClose(() => {
@@ -227,6 +231,9 @@ function snapshot() {
     en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2)]),
     bo: G.bombs.map(b => [r2(b.pos.x), r2(b.pos.y), r2(b.pos.z)]),
     es: G.escort ? [r2(G.escort.s), Math.ceil(G.escort.hp), G.escort.status] : null,
+    tu: G.turrets.filter(t => !t.dead).map(t => [t.id, r2(t.pos.x), r2(t.pos.z), r2(t.yaw), t.ammo]),
+    ph: Object.fromEntries(Object.values(G.props).filter(p => p.maxHp).map(p => [p.id, [Math.ceil(p.hp), Math.ceil(p.maxHp)]])),
+    tl: G.players.map(p => [p.id, p.turrets ?? 0]),
   };
 }
 
@@ -292,6 +299,10 @@ function applySnapshot(s) {
   });
   syncBombVisuals(s.bo);
   if (s.es && G.escort) { [G.escort.s, G.escort.hp, G.escort.status] = s.es; poseEscort(); }
+  syncTurretVisuals(s.tu ?? []);
+  for (const [id, [hp, max]] of Object.entries(s.ph ?? {})) if (G.props[id]) { G.props[id].hp = hp; G.props[id].maxHp = max; }
+  const mine = (s.tl ?? []).find(([id]) => id === G.local.id);
+  if (mine && mine[1] !== G.local.turrets) { G.local.turrets = mine[1]; updateHUD(); }
 }
 
 function applyFx(ev) {
@@ -360,3 +371,6 @@ export function netTick(dt) {
 export function sendShot(o, d, s, dm) { net.hostConn?.send({ t: 'shot', o: o.toArray().map(r2), d: d.toArray().map(v => Math.round(v * 1e4) / 1e4), s, dm }); }
 export function sendGrenade(pos, vel) { net.hostConn?.send({ t: 'nade', p: pos.toArray().map(r2), v: vel.toArray().map(r2) }); }
 
+
+/** Client: ask the host to place a turret. */
+export function sendDeploy(x, z, y) { net.hostConn?.send({ t: 'deploy', x: r2(x), z: r2(z), y: r2(y) }); }

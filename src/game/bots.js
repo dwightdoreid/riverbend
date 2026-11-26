@@ -3,7 +3,7 @@
 import { THREE } from '../engine/three.js';
 import { box, cyl, rod } from '../engine/builders.js';
 import { G } from './state.js';
-import { moveBlocked, los, freePoint } from './world.js';
+import { moveBlocked, los, freePoint, castSolid } from './world.js';
 import { eyeOf, isActive } from './players.js';
 import { isHost, isClient, fxAll } from '../net/net.js';
 import { projectile } from './combat.js';
@@ -135,6 +135,24 @@ function nearestPlayer(pos) {
 
 const flatDist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
+/** Line of fire to a point inside an object's own collision box (truck, generator, turret):
+ *  hitting that object's box counts as a clear shot. */
+function canHit(from, to, mover) {
+  const d = to.clone().sub(from), dist = d.length(), hit = castSolid(from, d.divideScalar(dist), dist - .1);
+  return !hit || (mover && hit.mover === mover);
+}
+
+/** Nearest live turret this enemy can shoot at. */
+function turretTarget(e, from) {
+  let best = null, bestD = 20;
+  for (const t of G.turrets) {
+    if (t.dead || !t.mover) continue;
+    const d = flatDist(e.pos, t.pos), aim = t.pos.clone().setY(.6);
+    if (d < bestD && canHit(from, aim, t.mover)) { best = t; bestD = d; }
+  }
+  return best;
+}
+
 function harassTarget(e) {
   const prop = e.def.harass && G.props[e.def.harass];
   return prop && prop.root.visible ? prop : null;
@@ -212,6 +230,15 @@ export function updateBots(dt) {
         const aim = eye.clone(); aim.y -= t.crouched ? .1 : .28;
         shootAt(e, aim, dist);
       }
+    } else if (!isClient() && turretTarget(e, from)) {
+      // Machines fight back against turrets that are shooting at them.
+      const t = turretTarget(e, from), dist = flatDist(e.pos, t.pos);
+      e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+      e.timer += dt; if (e.timer > T.strafeSwap) { e.dodge *= -1; e.timer = 0; }
+      if (dist > 10) navigate(e, t.pos, T.speed.close, dt);
+      else botMove(e, new THREE.Vector3(Math.cos(e.yaw) * e.dodge, 0, -Math.sin(e.yaw) * e.dodge).add(e.pos), T.speed.strafe, dt);
+      e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+      if (e.shot <= 0 && G.elapsed > G.protectUntil + .5) shootAt(e, t.pos.clone().setY(.6), dist);
     } else if (harassTarget(e)) {
       // Escort raiders go for the vehicle when no player is in sight.
       const prop = harassTarget(e), dist = flatDist(e.pos, prop.pos);
@@ -219,7 +246,7 @@ export function updateBots(dt) {
       else { e.timer += dt; if (e.timer > T.strafeSwap) { e.dodge *= -1; e.timer = 0; } botMove(e, new THREE.Vector3(Math.cos(e.yaw) * e.dodge, 0, -Math.sin(e.yaw) * e.dodge).add(e.pos), T.speed.strafe * .6, dt); }
       if (dist < 26) {
         e.yaw = Math.atan2(-(prop.pos.x - e.pos.x), -(prop.pos.z - e.pos.z));
-        if (e.shot <= 0 && G.elapsed > G.protectUntil + .5 && los(from, prop.pos)) shootAt(e, prop.pos.clone(), dist);
+        if (e.shot <= 0 && G.elapsed > G.protectUntil + .5 && canHit(from, prop.pos, prop.mover)) shootAt(e, prop.pos.clone(), dist);
       }
     } else if (e.memory > 0) {
       navigate(e, e.lastKnown, T.speed.search, dt);

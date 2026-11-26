@@ -56,7 +56,8 @@ export function updateHUD() {
   const w = WEAPONS[p.weapon], a = p.ammo[p.weapon];
   $('weaponName').textContent = w ? w.name : 'FRAG / GRENADE';
   $('ammoBig').innerHTML = w ? a.mag + ' <span>/ ' + a.reserve + '</span>' : p.grenades + ' <span>THROWABLES</span>';
-  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades;
+  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades + (G.mission?.turrets ? ' · TURRETS ' + (p.turrets ?? 0) : '');
+  $('turretBtn').style.display = G.mission?.turrets ? '' : 'none';
   const slots = [...p.loadout, 'grenade'], key = slots.join();
   if (ui.slotKey !== key) {
     ui.slotKey = key;

@@ -17,9 +17,10 @@ const r2 = v => Math.round(v * 100) / 100;
 
 /** owner: the player who fired, or null for hostile (enemy) fire.
  *  visual: a client-side copy that only draws (the host decides what real shots hit). */
-export function projectile(origin, dir, speed, damage, owner = null, visual = false) {
+export function projectile(origin, dir, speed, damage, owner = null, visual = false, echoOwner = false) {
   const hostile = !owner;
-  if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1 }, owner && !owner.local ? owner.id : null);
+  // The shooter's own browser already drew its shot, so it is skipped unless echoOwner (turrets).
+  if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1 }, owner && !owner.local && !echoOwner ? owner.id : null);
   const m = new THREE.Mesh(geo('sphere', .035, 5, 4), hostile ? hostileMat : bulletMat);
   m.position.copy(origin); G.dynRoot.add(m);
   G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, life: 1.6, mesh: m });

@@ -4,7 +4,7 @@
 import { THREE } from '../src/engine/three.js';
 import { G } from '../src/game/state.js';
 import { hurt, projectile, damageEnemy } from '../src/game/combat.js';
-import { litAt } from '../src/game/props.js';
+import { litAt, damageProp } from '../src/game/props.js';
 import { canvas, flashlight } from '../src/engine/render.js';
 
 const log = [], errors = [];
@@ -182,7 +182,7 @@ async function mission03() {
   G.simSteps = 10;
   await waitSim(120, escortFrame);
   check('escort triggers fired on the way', ['skimmers-low', 'ridge-sentries', 'halfway', 'last-stand', 'gate'].every(id => G.fired.has(id)), [...G.fired].join(','));
-  check('truck reaches Fernhill -> mission won', S().status === 'won', S().status + ' s=' + E.s.toFixed(1) + '/' + E.cum.at(-1).toFixed(1));
+  check('truck reaches Fernhill -> mission won', S().status === 'won', S().status + ' s=' + E.s.toFixed(1) + '/' + E.cum.at(-1).toFixed(1) + ' armour=' + Math.round(E.hp / E.maxHp * 100) + '%');
   G.simSteps = 6;
 
   // A destroyed truck fails the mission.
@@ -194,6 +194,61 @@ async function mission03() {
   check('destroyed truck fails the mission', S().status === 'lost', S().status);
 }
 
+async function mission04() {
+  await click('missionsBtn');                                   // opens the mission list
+  const card = document.querySelector('[data-mission="m04"]');
+  card?.click(); await frames(3);
+  check('mission 04 unlocked and selectable', !!card && !card.disabled && S().status === 'briefing' && S().mission === 'm04', S().mission);
+  check('night yard with floodlights', G.level.id === 'fernhill' && G.env.dark && litAt(new THREE.Vector3(0, 0, -10)));
+  await click('startBtn'); godMode();
+  check('m04 deploy with 2 turrets', S().status === 'playing' && G.local.turrets === 2 && document.getElementById('weaponInfo').textContent.includes('TURRETS 2'), document.getElementById('weaponInfo').textContent);
+
+  teleport(20, -18); await holdE(1.3);
+  check('check in with Ade', S().objective === 1, S().objective);
+
+  // Turret: deploy facing the south gate.
+  teleport(0, -4, Math.PI); await tap('t'); await frames(2);
+  check('turret deploys in front of the player', G.turrets.length === 1 && G.local.turrets === 1 && G.turrets[0].pos.z > -4, G.turrets.length + ' left=' + G.local.turrets);
+  G.objState.hold = 24.8; await waitSim(.5);
+  check('prep ends -> first phase starts with a wave', S().objective === 2 && G.enemies.length >= 3, 'objective=' + S().objective + ' enemies=' + G.enemies.length);
+  check('survive objective shows timer and generator health', /left · Gen A 100%/.test(document.getElementById('objectiveSub').textContent), document.getElementById('objectiveSub').textContent);
+
+  G.simSteps = 10;
+  teleport(-20, -20);  // stay out of the turret's way
+  await waitSim(16);
+  check('turret engages machines', G.turrets[0].ammo < 150, 'ammo=' + G.turrets[0].ammo + ' kills=' + G.local.stats.kills);
+  G.simSteps = 6;
+
+  // Generator damage and repair.
+  const gA = G.props.genA, hpA = gA.hp, o = gA.pos.clone().add(new THREE.Vector3(0, 0, 8));
+  projectile(o, gA.pos.clone().sub(o).normalize(), 44, 9, null); await frames(3);
+  check('machine fire damages generators', gA.hp === hpA - 9, hpA + ' -> ' + gA.hp);
+  damageProp(gA, 500); const hpB = gA.hp;
+  teleport(-11, -11.5); await holdE(2.9);
+  check('repairing restores generator health', gA.hp > hpB, hpB + ' -> ' + gA.hp);
+
+  G.objState.hold = 20.3; await waitSim(.3);
+  check('timed waves fire during survive phases', G.fired.has('p1-west'), [...G.fired].join(','));
+  G.objState.hold = 74.8; await waitSim(.5);
+  check('phase 1 complete -> transfer switch trips', S().objective === 3 && G.props.switch.style === 'off', S().objective + ' ' + G.props.switch.style);
+  teleport(20, -18); await holdE(3.3);
+  check('switch reset -> checkpoint + bonus turret', S().objective === 4 && G.checkpoint?.name === 'Switch reset' && G.local.turrets === 2, S().objective + ' ' + G.checkpoint?.name + ' turrets=' + G.local.turrets);
+
+  // Losing two generators fails the mission; retry restores them from the checkpoint.
+  damageProp(G.props.genA, 1e6); damageProp(G.props.genC, 1e6);
+  check('two generators lost', G.props.genA.style === 'wrecked' && G.props.genC.style === 'wrecked');
+  await waitSim(2.5);
+  check('blackout fails the mission', S().status === 'lost', S().status);
+  await click('retryBtn'); godMode();
+  check('retry restores generators and the deployed turret', S().objective === 4 && G.props.genA.style === 'running' && G.props.genA.hp > 0 && G.turrets.length === 1,
+    'objective=' + S().objective + ' genA=' + G.props.genA.style + ' turrets=' + G.turrets.length);
+
+  G.objState.hold = 89.8; await waitSim(.5);
+  check('sync phase complete -> final push', S().objective === 5, S().objective);
+  G.objState.hold = 59.8; await waitSim(3.5);
+  check('final push survived -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -202,9 +257,10 @@ async function run() {
   await mission01();
   await mission02();
   await mission03();
+  await mission04();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
-  await click('restartBtn'); godMode();
+  await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
 
   check('no runtime errors', errors.length === 0, errors.join(' | '));
   const report = { passed: log.every(l => l.ok), log, errors, drawCalls: S().drawCalls };

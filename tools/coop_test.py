@@ -157,6 +157,18 @@ def main():
         host.js("document.getElementById('nextBtn').click()")
         check('next mission briefing follows host', client.wait_for(f"{G}.status === 'briefing' && {G}.mission.id === 'm02'"))
 
+        # Mission 04: a client's turret is placed by the host and drawn on both sides.
+        host.mod('/src/game/flow.js', "m.selectMission(3); m.deploy(); return true")
+        check('both in mission 04', client.wait_for(f"{G}.status === 'playing' && {G}.mission.id === 'm04'") and host.js(f"{G}.players.length") == 2)
+        host.js(f"{G}.local.health = 1e6")
+        client.js(f"{G}.local.pos.set(-4, 0, -2); {G}.local.yaw = Math.PI")
+        host.wait_for(f"(() => {{ const p = {G}.players.find(q => !q.local); return Math.hypot(p.pos.x + 4, p.pos.z + 2) < .5; }})()")
+        client.mod('/src/game/turrets.js', f"m.deployTurret({G}.local); return true")
+        check('client turret deployed on host', host.wait_for(f"{G}.turrets.length === 1 && {G}.turrets[0].owner.id === 1"))
+        check('turret appears on client + count drops', client.wait_for(f"{G}.turrets.length === 1 && {G}.local.turrets === 1"), client.js(f"{G}.local.turrets"))
+        host.mod('/src/game/props.js', f"m.damageProp({G}.props.genA, 300); return true")
+        check('generator damage syncs to client', client.wait_for(f"{G}.props.genA.hp < {G}.props.genA.maxHp"))
+
         # Leave and rejoin mid-mission: drop in at the next checkpoint.
         client.mod('/src/net/net.js', "return m.leave().then(() => true)")
         check('client leaves cleanly', host.wait_for(f"{G}.net.roster.length === 1 && {G}.players.length === 1") and client.js(f"{G}.net.role") == 'solo')

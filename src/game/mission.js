@@ -8,7 +8,8 @@ import { G } from './state.js';
 import { clearWorld, clearMovers } from './world.js';
 import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
-import { spawnProps, spawnPickups } from './props.js';
+import { spawnProps, spawnPickups, repairProp } from './props.js';
+import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive } from './combat.js';
@@ -57,7 +58,7 @@ export function prepareMission(mission, checkpoint = null) {
   loadLevel(level);
   G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}) };
   applyEnvironment(G.env);
-  clearCombat(); clearRadio();
+  clearCombat(); clearRadio(); clearTurrets();
   if (G.dynRoot) G.dynRoot.removeFromParent();
   G.dynRoot = new THREE.Group(); scene.add(G.dynRoot);
   clearMovers();
@@ -68,7 +69,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupEscort(mission.escort);
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
-  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; });
+  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
   updateHUD();
 }
@@ -170,6 +171,14 @@ export function objectiveText() {
   let name = o.name, sub = o.sub ?? '';
   if (o.type === 'collect') name += ` (${G.objState.collected.size}/${o.targets.length})`;
   if (o.type === 'hold') sub += ` · ${Math.floor(Math.min(1, G.objState.hold / o.time) * 100)}%`;
+  if (o.type === 'survive') {
+    const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
+    sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
+  }
+  if (o.guard) sub += ' · ' + o.guard.map(id => {
+    const p = G.props[id];
+    return (p.label ?? id) + ' ' + (p.style === 'wrecked' ? 'LOST' : Math.ceil(p.hp / p.maxHp * 100) + '%');
+  }).join(' · ');
   if (o.type === 'escort' && G.escort) {
     const E = G.escort;
     sub = 'Truck ' + ESCORT_STATUS[E.status] + ' · armour ' + Math.ceil(E.hp / E.maxHp * 100) + '%';
@@ -220,6 +229,9 @@ export function updateObjective(dt) {
       G.objState.hold += dt;
       if (G.objState.hold >= o.time) completeObjective(inside[0]);
     }
+  } else if (o.type === 'survive') {
+    G.objState.hold += dt;
+    if (G.objState.hold >= o.time) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'escort') {
     updateEscort(dt, o);
   } else if (o.type === 'eliminate') {
@@ -251,6 +263,7 @@ const EVENTS = {
     if (ev.feed) feed(ev.feed);
   },
   checkpoint: ev => takeCheckpoint(ev.name),
+  giveTurrets: ev => { for (const p of G.players) p.turrets = (p.turrets ?? 0) + (ev.count ?? 1); feed('+' + (ev.count ?? 1) + ' turret' + ((ev.count ?? 1) > 1 ? 's' : '') + ' each'); updateHUD(); },
   win: () => finish(true),
   fail: () => finish(false),
 };
@@ -284,7 +297,8 @@ const CONDITIONS = {
   time: t => G.elapsed >= t,
   enter: ([x, z, r]) => G.players.some(p => isActive(p) && Math.hypot(p.pos.x - x, p.pos.z - z) < r),
   near: ([prop, r]) => G.players.some(p => isActive(p) && flat(p.pos, posOf(prop)) < r),
-  hold: t => currentObjective()?.type === 'hold' && G.objState.hold >= t,
+  hold: t => ['hold', 'survive'].includes(currentObjective()?.type) && G.objState.hold >= t,
+  destroyed: ([ids, n]) => ids.filter(id => G.props[id]?.style === 'wrecked').length >= n,
   collected: n => G.objState.collected.size >= n,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
   escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,
@@ -311,10 +325,12 @@ function takeCheckpoint(name = 'Checkpoint') {
     props: Object.fromEntries(Object.values(G.props).map(p => [p.id, p.style])),
     pickups: G.pickups.map(k => k.used),
     escort: G.escort ? { s: G.escort.s, hp: G.escort.hp } : null,
+    propHp: Object.fromEntries(Object.values(G.props).filter(p => p.maxHp).map(p => [p.id, p.hp])),
+    turrets: snapshotTurrets(),
     enemies: snapshotEnemies(),
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
-      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight,
+      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets,
     })),
   };
   for (const p of G.players) p.stims = 1;
@@ -332,12 +348,15 @@ function applyCheckpoint(c) {
   for (const [id, style] of Object.entries(c.props)) G.props[id]?.setStyle(style);
   c.pickups.forEach((used, i) => { G.pickups[i].used = used; G.pickups[i].g.visible = !used; });
   restoreEnemies(c.enemies);
+  for (const [id, hp] of Object.entries(c.propHp ?? {})) if (G.props[id]) G.props[id].hp = G.props[id].style === 'wrecked' ? 0 : Math.max(hp, G.props[id].maxHp * .4);
   if (G.escort && c.escort) { G.escort.s = c.escort.s; G.escort.hp = Math.max(c.escort.hp, G.escort.maxHp * .5); poseEscort(); }
   G.players.forEach((p, i) => {
     const s = c.players[i % c.players.length];
     p.pos.set(s.pos[0], 0, s.pos[1]); p.yaw = s.yaw; p.health = Math.max(s.health, 60);
     p.ammo = structuredClone(s.ammo); p.grenades = s.grenades; p.weapon = s.weapon; p.lastGun = s.lastGun; p.flashlight = s.flashlight;
+    p.turrets = Math.max(s.turrets ?? 0, 1) * (G.mission.turrets ? 1 : 0);
   });
+  restoreTurrets(c.turrets ?? []);
 }
 
 // ---------------------------------------------------------------- interaction
@@ -351,6 +370,11 @@ function interactionCandidate(p) {
   if (o && (kind === 'interact' || kind === 'collect')) {
     for (const id of objectiveTargets(o)) {
       if (flat(p.pos, posOf(id)) < (o.reach ?? 2.6)) return { type: 'objective', obj: id, name: o.action, time: o.time };
+    }
+  }
+  for (const q of Object.values(G.props)) {
+    if (q.repairable && q.style !== 'wrecked' && q.hp < q.maxHp && flat(q.pos, p.pos) < 4) {
+      return { type: 'repair', obj: q, name: 'Repair ' + (q.label ?? 'equipment') + ' (' + Math.ceil(q.hp / q.maxHp * 100) + '%)', time: 2.6 };
     }
   }
   for (const k of G.pickups) {
@@ -372,6 +396,7 @@ export function updateInteract(p, dt) {
   if (p.interactTime < c.time) return;
   p.interactTime = 0;
   if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
+  if (c.type === 'repair') { repairProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' patched ' + (c.obj.label ?? 'equipment')); return; }
   if (c.type === 'objective') {
     if (currentObjective().type === 'collect') collectTarget(p, c.obj); else completeObjective(p);
     return;
