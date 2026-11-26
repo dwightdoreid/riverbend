@@ -606,6 +606,35 @@ async function spawnSafety() {
   flow.selectMission(0); await frames(3);
 }
 
+async function mission12() {
+  await goNext(12);
+  check('mission 12 briefing, relay ridge', S().status === 'briefing' && S().mission === 'm12' && G.level.id === 'ridge', S().mission);
+  await click('startBtn'); godMode();
+  check('two turrets: one relay always depends on you', G.local.turrets === 2);
+  const R = ['relayW', 'relayC', 'relayE'].map(id => G.props[id]);
+  for (const r of R) { teleport(r.pos.x, r.pos.z + 2); await holdE(2.1); }
+  check('relays powered -> uplink + checkpoint', S().objective === 1 && R.every(r => r.style === 'online') && G.checkpoint?.name === 'Relays online', S().objective);
+
+  // Uplink speed scales with the number of relays online.
+  const rate = async () => { const h0 = G.objState.hold, t0 = G.elapsed; await waitSim(1.5); return (G.objState.hold - h0) / (G.elapsed - t0); };
+  const full = await rate();
+  check('all three online: full-speed uplink', Math.abs(full - 1) < .05, full.toFixed(2));
+  damageProp(R[0], 1e6); await frames(2);
+  check('a relay is knocked offline (not destroyed)', R[0].style === 'offline' && /West relay ○/.test(document.getElementById('objectiveSub').textContent), R[0].style + ' · ' + document.getElementById('objectiveSub').textContent);
+  const two = await rate();
+  check('two online: two-thirds speed', Math.abs(two - 2 / 3) < .05, two.toFixed(2));
+  teleport(R[0].pos.x, R[0].pos.z + 1.5); await holdE(3.3);
+  check('hold E reboots an offline relay at half health', R[0].style === 'online' && Math.abs(R[0].hp - R[0].maxHp * .5) < 1, R[0].style + ' ' + R[0].hp.toFixed(0));
+  damageProp(R[1], 300); const hp1 = R[1].hp;
+  teleport(R[1].pos.x, R[1].pos.z + 1.5); await holdE(2.8);
+  check('damaged relays can be patched', R[1].hp > hp1, hp1.toFixed(0) + ' -> ' + R[1].hp.toFixed(0));
+
+  const n0 = G.enemies.length; G.objState.hold = 15.1; await waitSim(.4);
+  check('Tallymen join at 15 s of uplink', G.fired.has('tallymen') && G.enemies.filter(e => e.type.name === 'Tallyman').length >= 3 && G.enemies.length >= n0 + 3);
+  G.objState.hold = 89.8; await waitSim(3);
+  check('uplink complete -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -613,7 +642,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -635,6 +664,7 @@ async function run() {
   await mission09();
   await mission10();
   await mission11();
+  await mission12();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

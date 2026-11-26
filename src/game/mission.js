@@ -8,7 +8,7 @@ import { G } from './state.js';
 import { clearWorld, clearMovers, moveBlocked, freePoint } from './world.js';
 import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
-import { spawnProps, spawnPickups, repairProp } from './props.js';
+import { spawnProps, spawnPickups, repairProp, rebootProp, isDown } from './props.js';
 import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
 import { clearBossFx } from './bosses.js';
 import { resetBlackout, updateBlackout } from './blackout.js';
@@ -170,6 +170,7 @@ const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export function objectiveTargets(o = currentObjective()) {
   if (!o) return [];
   if (o.type === 'collect') return o.targets.filter(t => !G.objState.collected.has(t));
+  if (o.type === 'uplink') { const down = o.targets.filter(t => G.props[t].style !== (o.onlineStyle ?? 'online')); return down.length ? down : o.targets; }
   return o.target ? [o.target] : [];
 }
 export function objectivePositions() {
@@ -194,6 +195,7 @@ export function objectiveText() {
     const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
     sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
   }
+  if (o.type === 'uplink') sub = 'Uplink ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + o.targets.map(id => (G.props[id].label ?? id) + (G.props[id].style === (o.onlineStyle ?? 'online') ? ' ●' : ' ○')).join('  ');
   if (o.type === 'switching') sub = Object.keys(G.mission.switching.breakers).map(id => id + (isClosed(id) ? ' ●' : ' ○')).join('   ') + (o.sub ? ' · ' + o.sub : '');
   if (o.timeLimit) {
     const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
@@ -201,7 +203,7 @@ export function objectiveText() {
   }
   if (o.guard) sub += ' · ' + o.guard.map(id => {
     const p = G.props[id];
-    return (p.label ?? id) + ' ' + (p.style === 'wrecked' ? 'LOST' : Math.ceil(p.hp / p.maxHp * 100) + '%');
+    return (p.label ?? id) + ' ' + (p.style === 'wrecked' ? 'LOST' : isDown(p) ? p.style.toUpperCase() : Math.ceil(p.hp / p.maxHp * 100) + '%');
   }).join(' · ');
   if (o.type === 'escort' && G.escort) {
     const E = G.escort;
@@ -258,6 +260,11 @@ export function updateObjective(dt) {
       G.objState.hold += dt;
       if (G.objState.hold >= o.time) completeObjective(inside[0]);
     }
+  } else if (o.type === 'uplink') {
+    // Progress scales with how many targets are up: all of them = full speed.
+    const up = o.targets.filter(id => G.props[id].style === (o.onlineStyle ?? 'online')).length;
+    G.objState.hold += dt * up / o.targets.length;
+    if (G.objState.hold >= o.time) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'switching') {
     if (goalReached()) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'survive') {
@@ -331,7 +338,7 @@ const CONDITIONS = {
   time: t => G.elapsed >= t,
   enter: ([x, z, r]) => G.players.some(p => isActive(p) && Math.hypot(p.pos.x - x, p.pos.z - z) < r),
   near: ([prop, r]) => G.players.some(p => isActive(p) && flat(p.pos, posOf(prop)) < r),
-  hold: t => ['hold', 'survive'].includes(currentObjective()?.type) && G.objState.hold >= t,
+  hold: t => ['hold', 'survive', 'uplink'].includes(currentObjective()?.type) && G.objState.hold >= t,
   destroyed: ([ids, n]) => ids.filter(id => G.props[id]?.style === 'wrecked').length >= n,
   breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
   enemyHp: ([tag, frac]) => G.enemies.some(e => e.def.tag === tag && (e.dead || e.hp <= e.maxHp * frac)),
@@ -414,7 +421,10 @@ function interactionCandidate(p) {
     }
   }
   for (const q of Object.values(G.props)) {
-    if (q.repairable && q.style !== 'wrecked' && q.hp < q.maxHp && flat(q.pos, p.pos) < 4) {
+    if (q.downStyle && q.style === q.downStyle && flat(q.pos, p.pos) < 3.2) {
+      return { type: 'reboot', obj: q, name: 'Reboot ' + (q.label ?? 'equipment'), time: 3 };
+    }
+    if (q.repairable && !isDown(q) && q.hp < q.maxHp && flat(q.pos, p.pos) < 4) {
       return { type: 'repair', obj: q, name: 'Repair ' + (q.label ?? 'equipment') + ' (' + Math.ceil(q.hp / q.maxHp * 100) + '%)', time: 2.6 };
     }
   }
@@ -438,6 +448,7 @@ export function updateInteract(p, dt) {
   p.interactTime = 0;
   if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
   if (c.type === 'breaker') { operate(c.obj, p); updateHUD(); return; }
+  if (c.type === 'reboot') { rebootProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' rebooted ' + (c.obj.label ?? 'equipment')); updateHUD(); return; }
   if (c.type === 'repair') { repairProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' patched ' + (c.obj.label ?? 'equipment')); return; }
   if (c.type === 'objective') {
     if (currentObjective().type === 'collect') collectTarget(p, c.obj); else completeObjective(p);

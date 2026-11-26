@@ -306,6 +306,35 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Relay mast: lattice tower with a dish and a base cabinet. Styles 'idle', 'online'
+  // (green beacon, dish turning), 'offline' (red, sparking).
+  relay(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const H = 14;
+    for (const dx of [-.7, .7]) for (const dz of [-.7, .7]) rod(root, [x + dx, 0, z + dz], [x + dx * .25, H, z + dz * .25], .07, 'steel', 5);
+    for (let y = 2; y < H; y += 2.4) { const s = .7 - y / H * .52; rod(root, [x - s, y, z - s], [x + s, y, z + s], .035, 'steel', 4); rod(root, [x + s, y, z - s], [x - s, y, z + s], .035, 'steel', 4); }
+    box(root, x, .3, z, 3.2, .6, 3.2, 'concrete');
+    const head = new THREE.Group(); head.position.set(x, H - 1.2, z); root.add(head);
+    const dish = cyl(head, 0, 0, -.6, 1.1, .3, .4, 'white', 16); dish.rotation.x = Math.PI / 2;
+    rod(head, [0, 0, -.6], [0, 0, -1.4], .04, 'steel', 5);
+    const lamps = { idle: emissive(0xf3b13a, 1.2), online: emissive(0x5ce08a, 2.2), offline: emissive(0xe0503a, 2) };
+    const beacon = box(root, x, H + .25, z, .35, .35, .35, lamps.idle);
+    box(root, x + 1.4, 1.2, z + 1.8, 1.4, 1.8, .7, 'edge');
+    const screen = box(root, x + 1.4, 1.5, z + 2.16, .9, .5, .04, lamps.idle);
+    const mover = addMover({ circles: [{ x, z, r: 1.4 }], box: new THREE.Box3(new THREE.Vector3(x - 1.1, 0, z - 1.1), new THREE.Vector3(x + 1.1, H, z + 1.1)) });
+    let last = 0;
+    const prop = {
+      root, mover, pos: new THREE.Vector3(x + 1.4, 1.3, z + 2.4),
+      setStyle(s) { beacon.material = lamps[s] ?? lamps.idle; screen.material = lamps[s] ?? lamps.idle; },
+      update(t) {
+        const dt = Math.min(.1, Math.max(0, t - last)); last = t;
+        if (prop.style === 'online') head.rotation.y += dt * .6;
+        if (prop.style === 'offline' && Math.random() < .08) burst(new THREE.Vector3(x, H - 1, z), 0xffd27a, 3, 2);
+      },
+    };
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -354,7 +383,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle' };
 
 export function spawnProps(defs) {
   G.props = {};
@@ -368,6 +397,7 @@ export function spawnProps(defs) {
     if (def.hp) {
       p.maxHp = p.hp = def.hp * (1 + .3 * (G.players.length - 1));
       p.repairable = def.repairable ?? true;
+      p.downStyle = def.downStyle ?? null; p.upStyle = def.upStyle ?? null;   // knocked out (rebootable) instead of destroyed
       p.mover.onHit = (dmg, hostile) => { if (hostile) damageProp(p, dmg); };
     }
   }
@@ -396,14 +426,23 @@ export function spawnPickups(defs) {
   });
 }
 
+/** A prop is "down" when destroyed ('wrecked') or knocked out (its def.downStyle, e.g. 'offline'). */
+export const isDown = p => p.style === 'wrecked' || (p.downStyle && p.style === p.downStyle);
+
 export function damageProp(p, dmg) {
-  if (!p.hp || p.style === 'wrecked' || G.status !== 'playing') return;
+  if (!p.hp || isDown(p) || G.status !== 'playing') return;
   p.hp = Math.max(0, p.hp - dmg);
   if (p.hp > 0) return;
-  p.setStyle('wrecked');
+  p.setStyle(p.downStyle ?? 'wrecked');
   burst(p.pos.clone().setY(2.4), 0x55504a, 30, 5);
   const def = G.mission.props.find(d => d.id === p.id);
-  runEvents(def.onDestroyed ?? [{ do: 'feed', text: (def.label ?? p.id) + ' destroyed' }]);
+  runEvents(def.onDestroyed ?? [{ do: 'feed', text: (def.label ?? p.id) + (p.downStyle ? ' knocked ' + p.downStyle : ' destroyed') }]);
+}
+
+/** Bring a knocked-out prop back (to half health). */
+export function rebootProp(p) {
+  if (!p.downStyle || p.style !== p.downStyle) return;
+  p.hp = p.maxHp * .5; p.setStyle(p.upStyle ?? 'online');
 }
 
 export function repairProp(p, fraction = .25) {

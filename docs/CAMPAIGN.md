@@ -147,5 +147,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 10 *Ironwalker*: the knee/core boss with kneel-and-recover phases, the Tallymen, and factions with three-way fights. **Act II complete.**
    - **In progress: Act III, *Islanding*, on the northern frontier.**
      - Done: 11 *Gale Line*: wind, lightning and rain, the ARC-3 carbine, and spinning turbines.
-     - Next: 12 *Three-Way*: hold three relay towers at once.
+     - Done: 12 *Three-Way*: the uplink objective, relays that are knocked offline and rebooted, and three-way fights over the ridge.
+     - Next: 13 *Static*: the same ridge in an EMP storm, with the HUD offline, Arc lobbers and EMP grenades.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

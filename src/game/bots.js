@@ -7,7 +7,7 @@ import { moveBlocked, los, freePoint, castSolid } from './world.js';
 import { eyeOf, isActive } from './players.js';
 import { isHost, isClient, fxAll } from '../net/net.js';
 import { projectile, hurt, smokeBlocks } from './combat.js';
-import { litAt } from './props.js';
+import { litAt, isDown } from './props.js';
 import { walkable, findPath } from './nav.js';
 import { sfxAt } from './fx.js';
 import { feed } from '../ui/hud.js';
@@ -339,9 +339,17 @@ function turretTarget(e, from) {
   return best;
 }
 
+/** def.harass: a prop id or a list of ids; raiders go for the nearest one that is still up. */
 function harassTarget(e) {
-  const prop = e.def.harass && G.props[e.def.harass];
-  return prop && prop.root.visible ? prop : null;
+  if (!e.def.harass) return null;
+  const ids = Array.isArray(e.def.harass) ? e.def.harass : [e.def.harass];
+  let best = null, bd = Infinity;
+  for (const id of ids) {
+    const p = G.props[id];
+    if (!p || !p.root.visible || isDown(p)) continue;
+    const d = flatDist(p.pos, e.pos); if (d < bd) { best = p; bd = d; }
+  }
+  return best;
 }
 
 export function shootAt(e, aim, dist) {
