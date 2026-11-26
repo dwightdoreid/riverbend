@@ -7,7 +7,9 @@
 //   pickups     [x, z, 'ammo' | 'med']
 //   enemies     { type, at: [x, z], patrol: [x, z] }
 //   objectives  { name, sub, target, action, time, onComplete: [events] }
-//   events      { do: 'say' | 'feed' | 'noise' | 'investigate' | 'propStyle' | 'win', ... }
+//   events      see EVENTS in src/game/mission.js (say, radio, spawn, checkpoint, wait, win...)
+const MARA = 'Mara · Ops';
+
 export default {
   id: 'm01',
   number: '01',
@@ -19,7 +21,7 @@ export default {
     eyebrow: 'Riverbend / mission 01',
     title: 'OPERATION<br><span>RECOVERY.</span>',
     lede: 'One yard. One data core. Get in, recover it, get out.',
-    body: 'Rogue sentry drones patrol the Riverbend training sector. Recover an access token from the western service crate, unlock the data core at the control-building console, and return to the gate.',
+    body: 'LODESTAR, the valley\'s automated grid-defence system, has locked every operator out and turned its sentries on anyone who approaches. Recover an access token from the western service crate, pull LODESTAR\'s data core from the control-building console, and get it out through the gate.',
     stages: [
       ['01 / ACCESS', 'Find the token', 'Western service crate'],
       ['02 / RECOVER', 'Retrieve the core', 'Control-building console'],
@@ -31,6 +33,11 @@ export default {
   intro: { text: 'Move west for the access token. Hold E near objectives.', time: 5 },
   success: { eyebrow: 'Mission complete / data recovered', title: 'CORE<br><span>SECURED.</span>', text: 'You recovered the core and reached extraction.' },
   failure: { eyebrow: 'Mission incomplete / retry available', title: 'SIGNAL<br><span>LOST.</span>', text: 'Use the barriers and buildings, watch the map, and keep a second weapon ready.' },
+
+  onStart: [
+    { do: 'radio', who: MARA, text: 'Kestrel, this is Mara. LODESTAR locked us out of Riverbend an hour ago and won\'t say why.' },
+    { do: 'radio', who: MARA, text: 'Its logs are on a data core in the control building. You\'ll need the access token from the western service crate first.' },
+  ],
 
   spawns: [[0, 35, 0], [2.5, 35, 0], [-2.5, 35, 0], [5, 35, 0]],
 
@@ -59,7 +66,7 @@ export default {
       target: 'token', action: 'Collect access token', time: 1.15,
       onComplete: [
         { do: 'propStyle', prop: 'token', style: 'teal' },
-        { do: 'say', text: 'Access token secured. Recover the core at the control building.', time: 4 },
+        { do: 'radio', who: MARA, text: 'Token\'s live. The core console is on the east side of the control building.' },
         { do: 'noise', at: 'token', radius: 17 },
       ],
     },
@@ -68,7 +75,8 @@ export default {
       target: 'core', action: 'Recover data core', time: 1.8,
       onComplete: [
         { do: 'propStyle', prop: 'core', style: 'amber' },
-        { do: 'say', text: 'Core secured. Return to the southern gate.', time: 4 },
+        { do: 'checkpoint', name: 'Core secured' },
+        { do: 'radio', who: MARA, text: 'Got it. Every sentry in the yard just turned toward you. Get to the south gate.' },
         { do: 'investigate', at: 'core' },
         { do: 'feed', text: 'Sentries are investigating the control building.' },
       ],

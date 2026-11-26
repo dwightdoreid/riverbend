@@ -17,11 +17,17 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 19 scripted checks in headless Chrome
+python3 tools/smoke_test.py                  # 37 scripted checks in headless Chrome
 python3 tools/smoke_test.py --screenshot shot.png
 ```
 
-The test opens `index.html?autotest=1`, which loads `tools/autotest.js`. That script plays the mission through the real input paths: shoot, reload, swap weapons, grenade, move, finish each objective, win, replay, die, pause and resume. It also fails if any runtime error appears.
+The test opens `index.html?autotest=1`, which loads `tools/autotest.js`. That script plays both missions through the real input paths and menu buttons:
+- shooting, reloading, weapon swaps, grenades and movement
+- interact, collect and hold objectives, waves and floodlights
+- checkpoint retry, mission unlock and next mission
+- pause, resume and death
+
+It also fails if any runtime error appears. A final check holds the right mouse button and clicks the left, using real mouse input sent through Chrome DevTools.
 
 ## Layout
 
@@ -42,7 +48,8 @@ src/
     bots.js           enemy types and AI that targets any living player
     props.js          mission props (terminals, extraction) and pickups
     mission.js        level loading, objectives, scripted events, interaction
-    flow.js           start, pause, restart, win, lose
+    flow.js           mission select, deploy, pause, checkpoint retry, win, lose
+    progress.js       unlocked missions and best times (saved in the browser)
     fx.js             routes sounds and toasts to the player they concern
     viewmodel.js      first-person camera and held weapon
   ui/hud.js, menu.js  HUD, minimap, objective marker, menus
@@ -54,14 +61,29 @@ substation_fps.html   the original single-file version, kept for reference
 
 ## Adding a mission
 
-Missions are plain data. Copy `src/missions/m01_recovery.js`, change its contents, then add it to `CAMPAIGN` in `src/missions/index.js`.
+Missions are plain data. Copy a file in `src/missions/`, change its contents, then add it to `CAMPAIGN` in `src/missions/index.js`. Mission 02, `m02_lights_out.js`, uses most of the features listed below.
 
-- **level**: an id from `src/levels/index.js`.
+**Mission-level fields**
+- **level**: an id from `src/levels/index.js`. **environment**: `day`, `night` or `storm` (`ENV_PRESETS` in `engine/render.js`).
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Objectives point at them through `target`.
-- **enemies**: `{ type, at, patrol }`, where `type` is a key of `ENEMY_TYPES` in `bots.js`.
-- **objectives**: run in order. Each has `onComplete` events.
-- **events**: `say`, `feed`, `noise`, `investigate`, `propStyle` and `win`. New verbs go in the `EVENTS` table in `mission.js`.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel` and `floodlight`. Each has a `style` that events can change.
+- **pickups**: `[x, z, 'ammo' | 'med']`.
+- **enemies**: `{ type, at, patrol }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`).
+- **onStart**: events that run when play begins.
+- **triggers**: `{ id, when, do: [events], objective? }`.
+
+**Objective types** (`type`)
+- `interact` (default): hold E at the `target` prop.
+- `collect`: hold E at each of several `targets`. Supports `onEach` and per-target `onTarget` events.
+- `reach`: get within `radius` of the target.
+- `hold`: stay within `radius` for `time` seconds while waves come in.
+- `eliminate`: destroy every machine.
+
+Each objective can have `onStart` and `onComplete` events.
+
+**Events** (`{ do: ..., ... }`): `say`, `radio`, `feed`, `noise`, `investigate`, `propStyle`, `spawn` (enemy waves), `checkpoint`, `wait`, `win` and `fail`. New ones go in the `EVENTS` table in `game/mission.js`.
+
+**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n` and `enemiesLeft: n`.
 
 ## Co-op readiness
 

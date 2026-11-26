@@ -119,12 +119,12 @@ There are 13 environments, and some are reused with different lighting or layout
 ## Build order
 
 1. **Done: Phase 0.** Restructured into modules, made the simulation multiplayer-ready, made missions data-driven, added the smoke test.
-2. **Phase 1, the mission toolkit plus mission 02 as a test case:**
+2. **Done: Phase 1.** Mission toolkit plus mission 02 as a test case:
    - checkpoints and saved progress
    - a mission select screen
-   - new event types: area triggers, timers, enemy waves, radio dialogue
-   - lighting presets (night and storm)
-   - a flashlight
+   - collect, hold, reach and eliminate objectives
+   - triggers, timed waves and radio dialogue
+   - night and storm lighting, the flashlight and sensor cones
    - the Skimmer
 3. **Phase 2, co-op:**
    - WebRTC rooms and lobby

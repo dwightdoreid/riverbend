@@ -135,7 +135,7 @@ def main():
     proc, profile, cdp = launch(url)
     try:
         report = None
-        deadline = time.time() + 150
+        deadline = time.time() + 400
         while time.time() < deadline:
             title = cdp.eval('document.title') or ''
             if title.startswith('AUTOTEST'):

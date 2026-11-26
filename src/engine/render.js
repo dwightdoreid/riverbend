@@ -19,6 +19,27 @@ sun.castShadow = true; sun.shadow.mapSize.set(coarse ? 1024 : 2048, coarse ? 102
 sun.shadow.bias = -.0003; sun.shadow.normalBias = .07;
 scene.add(sun); scene.add(sun.target);
 
+// Player flashlight. It always exists (intensity 0 when off) so toggling it never forces a
+// shader recompile; three.js recompiles materials when the number of lights changes.
+scene.add(camera);
+export const flashlight = new THREE.SpotLight(0xfff1d6, 0, 55, .5, .55, 1.4);
+flashlight.position.set(.18, -.12, 0); flashlight.target.position.set(0, -.08, -1);
+camera.add(flashlight); camera.add(flashlight.target);
+export const FLASHLIGHT_INTENSITY = 95;
+
+/** Lighting presets a mission can apply on top of its level's own environment. */
+export const ENV_PRESETS = {
+  day: {},
+  night: {
+    sky: '#0a121b', fog: [18, 95], hemi: [0x3a4d66, 0x0b0e12, .5], exposure: 1.15,
+    sun: { color: 0x9fb6ff, intensity: .28, pos: [35, 60, -45] }, dark: true, sightScale: .55,
+  },
+  storm: {
+    sky: '#3c4750', fog: [30, 140], hemi: [0x8796a3, 0x2a2f33, 1.1], exposure: 1,
+    sun: { color: 0xc7d3dc, intensity: .9, pos: [-20, 70, 10] }, sightScale: .8,
+  },
+};
+
 // The weapon is rendered in a separate scene, so its near plane never clips through the world.
 export const weaponScene = new THREE.Scene();
 export const viewCamera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, .01, 5);
@@ -27,6 +48,7 @@ const gunLight = new THREE.DirectionalLight(0xffe8c5, 2); gunLight.position.set(
 
 /** Applies a level's sky, fog, light and shadow settings. */
 export function applyEnvironment(env) {
+  renderer.toneMappingExposure = env.exposure ?? 1.05;
   scene.background = new THREE.Color(env.sky);
   scene.fog = new THREE.Fog(env.sky, env.fog[0], env.fog[1]);
   hemi.color.set(env.hemi?.[0] ?? 0xc5daee); hemi.groundColor.set(env.hemi?.[1] ?? 0x555b4c); hemi.intensity = env.hemi?.[2] ?? 1.9;

@@ -10,6 +10,12 @@ export const G = {
   mission: null,             // current mission definition (src/missions/*)
   missionIndex: 0,
   objective: 0,              // index into mission.objectives
+  objState: null,            // per-objective progress: { collected: Set, hold: seconds }
+  fired: new Set(),          // ids of mission triggers that have already fired
+  scripts: [],               // running event lists (support { do: 'wait' })
+  checkpoint: null,          // last checkpoint snapshot for this run
+  protectUntil: 2.5,         // players can't be hurt before this mission time
+  env: {},                   // active environment: level environment + mission preset
 
   level: null,               // current level definition (src/levels/*)
   levelRoot: null,           // static, batched level geometry

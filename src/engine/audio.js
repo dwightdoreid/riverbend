@@ -30,7 +30,8 @@ export function sound(kind = 'shot', level = 1) {
     o.connect(g); o.start(t); o.stop(t + dur);
   } else {
     const o = audio.createOscillator(); o.type = 'sine';
-    o.frequency.setValueAtTime(kind === 'hit' ? 760 : kind === 'reload' ? 310 : kind === 'hurt' ? 130 : 560, t);
+    o.frequency.setValueAtTime(kind === 'hit' ? 760 : kind === 'reload' ? 310 : kind === 'hurt' ? 130 : kind === 'radio' ? 1180 : 560, t);
+    if (kind === 'radio') o.frequency.setValueAtTime(880, t + .06);
     g.gain.setValueAtTime(.075 * level, t); g.gain.exponentialRampToValueAtTime(.001, t + .13);
     o.connect(g); o.start(t); o.stop(t + .15);
   }

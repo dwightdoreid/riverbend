@@ -11,7 +11,6 @@ import { finish } from './flow.js';
 
 const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
-const SPAWN_PROTECTION = 2.5;
 
 /** owner: the player who fired, or null for hostile (enemy) fire. */
 export function projectile(origin, dir, speed, damage, owner = null) {
@@ -36,14 +35,14 @@ export function damageEnemy(e, amount, head = false, attacker = null) {
   if (e.hp <= 0) {
     e.dead = true; e.g.visible = false;
     if (attacker) attacker.stats.kills++;
-    burst(e.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xc3be9e, 14, 3);
+    burst(e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), 0xc3be9e, 14, 3);
     if (attacker?.local) showHit(true);
-    feed('Sentry disabled' + (head ? ' · sensor hit' : ''));
+    feed(e.type.name + ' disabled' + (head ? ' · sensor hit' : ''));
   } else if (head) feed('Sensor hit');
 }
 
 export function hurt(p, amount, source) {
-  if (G.status !== 'playing' || !p.alive || G.elapsed < SPAWN_PROTECTION) return;
+  if (G.status !== 'playing' || !p.alive || G.elapsed < G.protectUntil) return;
   p.health = Math.max(0, p.health - amount); p.stats.damage += amount;
   sfxFor(p, 'hurt');
   if (p.local) showDamage(p, source);
@@ -69,8 +68,7 @@ function impact(p) {
   m.position.copy(p); G.dynRoot.add(m); G.decals.push(m);
 }
 
-const ENEMY_PARTS = [{ y: 1.2, r: .61, head: false }, { y: 1.75, r: .31, head: true }];
-const sphere = new THREE.Sphere(), tmp = new THREE.Vector3();
+const sphere = new THREE.Sphere(), tmp = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
 
 export function updateProjectiles(dt) {
   const cullX = world.bounds.x + 53, cullZ = world.bounds.z + 63.5;
@@ -82,8 +80,9 @@ export function updateProjectiles(dt) {
     if (!p.hostile) {
       for (const e of G.enemies) {
         if (e.dead) continue;
-        for (const part of ENEMY_PARTS) {
-          sphere.set(tmp.copy(e.pos).setY(e.pos.y + part.y), part.r);
+        for (const part of e.type.hitParts) {
+          tmp.set(0, 0, part.z ?? 0).applyAxisAngle(UP, e.yaw).add(e.pos); tmp.y = part.y;
+          sphere.set(tmp, part.r);
           const hit = testRay.intersectSphere(sphere, new THREE.Vector3());
           if (hit) { const d = hit.distanceTo(p.pos); if (d < nearest && d <= distance) { nearest = d; victim = e; head = part.head; } }
         }
@@ -142,7 +141,7 @@ function explode(b) {
   ring.position.copy(p); G.dynRoot.add(ring); G.effects.push({ ring, life: .32, total: .32 });
   for (const e of G.enemies) {
     if (e.dead) continue;
-    const target = e.pos.clone().add(new THREE.Vector3(0, 1.2, 0)), d = target.distanceTo(p);
+    const target = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), d = target.distanceTo(p);
     if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner);
   }
   for (const pl of G.players) {

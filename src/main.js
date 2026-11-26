@@ -1,20 +1,18 @@
 // Entry point: wires modules together and runs the frame loop.
 import { $ } from './engine/dom.js';
-import { renderer, camera, canvas, setQuality, resize, renderFrame } from './engine/render.js';
+import { renderer, camera, canvas, setQuality, resize, renderFrame, flashlight, FLASHLIGHT_INTENSITY } from './engine/render.js';
 import { setVolume } from './engine/audio.js';
 import { G } from './game/state.js';
 import { createPlayer, updatePlayer } from './game/players.js';
 import { WEAPONS } from './game/weapons.js';
 import { updateBots } from './game/bots.js';
 import { updateProjectiles, updateBombs, updateEffects } from './game/combat.js';
-import { prepareMission, updateInteract, currentObjective } from './game/mission.js';
+import { updateInteract, updateObjective, updateScripts, checkTriggers, objectiveTargets } from './game/mission.js';
 import { updateProps } from './game/props.js';
-import { start, pause, restart } from './game/flow.js';
+import { pause, selectMission } from './game/flow.js';
 import { updateCamera, updateViewModel } from './game/viewmodel.js';
 import { updateUI, drawMap, updateMarker } from './ui/hud.js';
-import { showBriefing } from './ui/menu.js';
 import { setupInput, sampleInput, settings } from './input.js';
-import { CAMPAIGN } from './missions/index.js';
 
 fetch('vendor/LICENSE-three.txt').then(r => r.text()).then(t => { $('license').textContent = t; }).catch(() => {});
 
@@ -22,14 +20,10 @@ fetch('vendor/LICENSE-three.txt').then(r => r.text()).then(t => { $('license').t
 G.local = createPlayer({ id: 0, name: 'You', local: true });
 G.players.push(G.local);
 
-G.missionIndex = 0;
-prepareMission(CAMPAIGN[G.missionIndex]);
-showBriefing(G.mission);
+selectMission(0);
 
-// Menu and settings.
-$('startBtn').onclick = start;
+// Menu and settings (menu action buttons are rendered by ui/menu.js).
 $('pauseBtn').onclick = pause;
-$('restartBtn').onclick = restart;
 $('controlsBtn').onclick = () => { $('menuControls').style.display = $('menuControls').style.display === 'block' ? 'none' : 'block'; };
 $('sensitivity').oninput = e => { settings.sensitivity = +e.target.value; };
 $('volume').oninput = e => setVolume(+e.target.value);
@@ -53,6 +47,9 @@ function step(dt) {
   updateBombs(dt);
   updateEffects(dt);
   for (const p of G.players) updateInteract(p, dt);
+  updateObjective(dt);
+  updateScripts(dt);
+  checkTriggers();
 }
 
 let last = performance.now();
@@ -64,9 +61,11 @@ function tick(now) {
     if (G.status === 'playing') {
       updateCamera(G.local); updateViewModel(G.local); updateUI(dt);
       if (G.frame % 3 === 0) { drawMap(); updateMarker(); }
-      updateProps(currentObjective()?.target);
+      updateProps(objectiveTargets());
+      flashlight.intensity = G.local.flashlight ? FLASHLIGHT_INTENSITY : 0;
     }
   } else if (G.status === 'briefing') {
+    flashlight.intensity = 0;
     const mc = G.level.menuCamera;
     G.menuOrbit += dt * .025;
     camera.position.set(Math.sin(.7 + G.menuOrbit) * mc.radius, mc.height, Math.cos(.7 + G.menuOrbit) * mc.radius);

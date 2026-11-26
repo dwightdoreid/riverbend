@@ -6,3 +6,16 @@
 @media(max-height:520px) and (pointer:coarse){#weaponHUD{right:10px;bottom:8px;padding:7px 10px;min-width:210px;max-width:240px}#weaponName{font-size:8px}#ammoBig{font-size:23px;line-height:1.05}#ammoBig span{font-size:12px}#weaponInfo{font-size:8px;margin:2px 0}#weapons{margin-top:4px}#weapons button{font-size:8px;padding:5px 8px}.touch-actions{bottom:140px}.touch-row{bottom:105px;right:14px}.touch-row button{padding:8px 11px;font-size:9px}#messages{bottom:17px;left:45%;max-width:37%;font-size:9px}#sprintMeter{bottom:6px;width:105px;left:45%}#readout{bottom:8px;left:12px}.health-box{padding:8px 11px;min-width:90px}.health-box small{font-size:8px}.health-box .value{font-size:26px}#stance{font-size:8px}#useBtn{bottom:133px;left:55%}#dpad{bottom:93px}}
 @media(prefers-reduced-motion:reduce){.spinner{animation:none}}
 
+
+/* Phase 1: radio subtitles, flashlight state, mission select */
+#radio{position:absolute;left:22px;bottom:150px;max-width:380px;background:var(--panel);border:1px solid var(--line);border-left:3px solid #8fc6f0;border-radius:8px;padding:9px 13px;font-size:12px;line-height:1.5;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s}
+#radio.on{opacity:1;transform:none}
+#radio b{display:block;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;color:#8fc6f0;margin-bottom:2px}
+#flashState{font-size:9px;letter-spacing:1.4px;color:#fff1c9;margin-top:4px}
+.mission-list{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:20px 0;max-width:560px}
+.mission-card{text-align:left;border:1px solid #ffffff20;border-radius:8px;background:#0c1f2670;padding:11px 13px;font-size:12px;line-height:1.5}
+.mission-card strong{display:block;font-size:10px;color:var(--amber);letter-spacing:1.3px}
+.mission-card small{display:block;color:var(--muted);font-size:10px}
+.mission-card.locked{opacity:.45;cursor:not-allowed}
+.mission-card.current{border-color:var(--amber)}
+@media(max-width:700px){#radio{left:12px;right:12px;bottom:190px;max-width:none;font-size:11px}.mission-list{grid-template-columns:1fr}}

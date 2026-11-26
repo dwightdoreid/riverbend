@@ -6,9 +6,26 @@ import { G } from '../game/state.js';
 import { world } from '../game/world.js';
 import { WEAPONS } from '../game/weapons.js';
 import { spreadOf } from '../game/players.js';
-import { currentObjective, objectivePos } from '../game/mission.js';
+import { objectiveText, objectivePosFor, objectivePositions, currentObjective, inHoldZone } from '../game/mission.js';
+import { sound } from '../engine/audio.js';
 
-const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0 };
+const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
+
+// Radio dialogue: lines queue up and play one at a time as subtitles.
+const radioQueue = [];
+let radioLeft = 0;
+export function radio(who, text, time) {
+  radioQueue.push({ who, text, time: time ?? Math.min(9, 1.6 + text.split(' ').length * .33) });
+}
+export function clearRadio() { radioQueue.length = 0; radioLeft = 0; $('radio').classList.remove('on'); }
+function updateRadio(dt) {
+  radioLeft -= dt;
+  if (radioLeft > 0) return;
+  const line = radioQueue.shift();
+  if (!line) { $('radio').classList.remove('on'); return; }
+  $('radioWho').textContent = line.who; $('radioText').textContent = line.text;
+  $('radio').classList.add('on'); radioLeft = line.time; sound('radio', .6);
+}
 
 export function say(text, time = 3) { $('toast').textContent = text; ui.toastLeft = time; $('toast').style.opacity = 1; }
 export function feed(text) { G.messages.unshift({ text, t: 4 }); if (G.messages.length > 3) G.messages.pop(); }
@@ -21,7 +38,7 @@ export function showDamage(p, source) {
   if (source) { const d = source.clone().sub(p.pos), angle = Math.atan2(d.x, -d.z) + p.yaw; $('damageArrow').style.transform = 'rotate(' + angle + 'rad)'; }
   $('health').textContent = Math.ceil(p.health);
 }
-export function resetHUD() { ui.toastLeft = ui.hitLeft = ui.damageFlash = 0; }
+export function resetHUD() { ui.toastLeft = ui.hitLeft = ui.damageFlash = 0; ui.objKey = ''; }
 
 function healthDisplay(p) {
   $('health').textContent = Math.ceil(p.health); $('healthFill').style.width = p.health + '%';
@@ -31,9 +48,8 @@ function healthDisplay(p) {
 
 export function updateHUD() {
   const p = G.local; if (!p) return;
-  const obj = currentObjective();
-  if (obj) { $('objectiveTitle').textContent = obj.name; $('objectiveSub').textContent = obj.sub; }
-  $('aimBtn').classList.toggle('primary', p.aiming); $('crouchBtn').classList.toggle('primary', p.crouched);
+  setObjectiveText();
+  $('aimBtn').classList.toggle('primary', p.aiming); $('crouchBtn').classList.toggle('primary', p.crouched); $('lightBtn').classList.toggle('primary', !!p.flashlight);
   healthDisplay(p);
   const w = WEAPONS[p.weapon], a = p.ammo[p.weapon];
   $('weaponName').textContent = w ? w.name : 'FRAG / GRENADE';
@@ -42,8 +58,21 @@ export function updateHUD() {
   document.querySelectorAll('[data-weapon]').forEach(b => b.classList.toggle('active', b.dataset.weapon === p.weapon));
 }
 
+function setObjectiveText() {
+  const t = objectiveText(); if (!t) return;
+  const key = t.name + '|' + t.sub; if (key === ui.objKey) return;
+  ui.objKey = key; $('objectiveTitle').textContent = t.name; $('objectiveSub').textContent = t.sub;
+}
+
 export function updateInteractUI(p) {
   const c = p.interaction;
+  if (!c && inHoldZone(p)) {
+    const o = currentObjective();
+    $('interact').style.display = 'block'; $('useBtn').style.display = 'none';
+    $('interactText').textContent = o.holdText ?? 'Holding position · stay in the zone';
+    $('interactFill').style.width = Math.min(100, G.objState.hold / o.time * 100) + '%';
+    return;
+  }
   $('interact').style.display = c ? 'block' : 'none';
   $('useBtn').style.display = c && coarse ? 'block' : 'none';
   if (!c) return;
@@ -75,6 +104,9 @@ export function updateUI(dt) {
   $('stance').textContent = p.sprinting ? 'SPRINTING' : p.crouched ? 'CROUCHED' : p.aiming ? 'AIMING' : 'STANDING';
   $('sprintFill').style.width = p.stamina + '%';
   updateInteractUI(p);
+  setObjectiveText();
+  updateRadio(dt);
+  $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
 }
 
 const mc = $('map').getContext('2d'), MW = 296, MH = 272;
@@ -88,9 +120,8 @@ export function drawMap() {
   for (const b of world.solids) if ((b.max.x - b.min.x) > 2 && (b.max.z - b.min.z) > 1) mc.fillRect(mx(b.min.x), mz(b.min.z), mx(b.max.x) - mx(b.min.x), mz(b.max.z) - mz(b.min.z));
   mc.strokeStyle = '#6b8178';
   for (const [x0, z0, x1, z1] of map.lines ?? []) { mc.beginPath(); mc.moveTo(mx(x0), mz(z0)); mc.lineTo(mx(x1), mz(z1)); mc.stroke(); }
-  const o = currentObjective();
-  if (o) {
-    const op = objectivePos(o); mc.fillStyle = '#f3ba65'; mc.save(); mc.translate(mx(op.x), mz(op.z)); mc.rotate(Math.PI / 4); mc.fillRect(-4, -4, 8, 8); mc.restore();
+  for (const op of objectivePositions()) {
+    mc.fillStyle = '#f3ba65'; mc.save(); mc.translate(mx(op.x), mz(op.z)); mc.rotate(Math.PI / 4); mc.fillRect(-4, -4, 8, 8); mc.restore();
   }
   for (const e of G.enemies) if (!e.dead && (e.visible || G.elapsed - e.seenAt < 3)) {
     mc.fillStyle = '#f48c72'; mc.beginPath(); mc.arc(mx(e.pos.x), mz(e.pos.z), 3.5, 0, Math.PI * 2); mc.fill();
@@ -104,13 +135,14 @@ export function drawMap() {
 }
 
 export function updateMarker() {
-  const o = currentObjective(), p = G.local; if (!o) return;
-  const op = objectivePos(o), pt = op.clone().add(new THREE.Vector3(0, 1, 0)), v = pt.clone().project(camera);
+  const p = G.local, op = objectivePosFor(p), m = $('objectiveMarker');
+  m.style.display = op ? '' : 'none'; if (!op) return;
+  const pt = op.clone().add(new THREE.Vector3(0, 1, 0)), v = pt.clone().project(camera);
   const dir = pt.clone().sub(camera.position), front = dir.dot(camera.getWorldDirection(new THREE.Vector3())) > 0;
   let x = (v.x * .5 + .5) * innerWidth, y = (-v.y * .5 + .5) * innerHeight;
   if (!front) { x = innerWidth / 2 + (dir.x * Math.cos(p.yaw) - dir.z * Math.sin(p.yaw) > 0 ? 1 : -1) * (innerWidth / 2 - 40); y = innerHeight * .45; }
   x = THREE.MathUtils.clamp(x, 28, innerWidth - 28); y = THREE.MathUtils.clamp(y, 135, innerHeight - 150);
-  const m = $('objectiveMarker'); m.style.left = x + 'px'; m.style.top = y + 'px';
+  m.style.left = x + 'px'; m.style.top = y + 'px';
   m.querySelector('b').textContent = front ? '◇' : '›';
   m.querySelector('span').textContent = Math.round(Math.hypot(p.pos.x - op.x, p.pos.z - op.z)) + ' m';
 }

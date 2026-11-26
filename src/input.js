@@ -46,6 +46,7 @@ function setFire(down) {
   if (down) { me().input.trigger = true; me().input.semi = true; } else me().input.trigger = false;
 }
 function toggleCrouch() { me().crouched = !me().crouched; $('crouchBtn').classList.toggle('primary', me().crouched); }
+function toggleLight() { me().flashlight = !me().flashlight; $('lightBtn').classList.toggle('primary', me().flashlight); }
 function toggleAim() { me().aiming = !me().aiming; $('aimBtn').classList.toggle('primary', me().aiming); }
 
 function look(dx, dy, touch) {
@@ -118,6 +119,7 @@ export function setupInput() {
     else if (k === '3') switchWeapon(p, 'grenade');
     else if (k === 'c' || k === 'control') p.crouched = !p.crouched;
     else if (k === 'q') p.aiming = !p.aiming;
+    else if (k === 'f') toggleLight();
   });
   document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   window.addEventListener('blur', () => { keys.clear(); if (me()) me().input.trigger = me().input.semi = false; if (playing()) pause(); });
@@ -130,6 +132,7 @@ export function setupInput() {
   holdButton($('useBtn'), () => keys.add('e'), () => keys.delete('e'));
   $('aimBtn').onclick = () => { if (playing()) toggleAim(); };
   $('crouchBtn').onclick = () => { if (playing()) toggleCrouch(); };
+  $('lightBtn').onclick = () => { if (playing()) toggleLight(); };
   $('reloadBtn').onclick = () => reload(me());
   $('grenadeBtn').onclick = () => throwGrenade(me());
   document.querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => switchWeapon(me(), b.dataset.weapon));
