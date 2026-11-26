@@ -27,6 +27,8 @@ export const G = {
   enemies: [],
   pickups: [],
   turrets: [],
+  shells: [],                // boss mortar shells (host)
+  markers: [],               // ground warning rings
   props: {},                 // named mission props (terminals, extraction rings...)
   projectiles: [],
   bombs: [],

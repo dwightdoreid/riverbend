@@ -17,6 +17,7 @@ import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
 import { poseEscort } from '../game/mission.js';
 import { makeTurret, syncTurretVisuals } from '../game/turrets.js';
+import { clientMortar } from '../game/bosses.js';
 import { updateHUD } from '../ui/hud.js';
 import { say, feed, radio, showHit, showDamage } from '../ui/hud.js';
 import { openTransport, randomCode } from './transport.js';
@@ -228,7 +229,7 @@ function snapshot() {
         p.interaction ? [p.interaction.name, r2(p.interactTime / p.interaction.time)] : 0,
         reviver ? r2(reviver.interactTime / reviver.interaction.time) : 0];
     }),
-    en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2)]),
+    en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2) | (e.exposed ? 16 : 0)]),
     bo: G.bombs.map(b => [r2(b.pos.x), r2(b.pos.y), r2(b.pos.z)]),
     es: G.escort ? [r2(G.escort.s), Math.ceil(G.escort.hp), G.escort.status] : null,
     tu: G.turrets.filter(t => !t.dead).map(t => [t.id, r2(t.pos.x), r2(t.pos.z), r2(t.yaw), t.ammo]),
@@ -294,7 +295,7 @@ function applySnapshot(s) {
     (e.netPos ??= new THREE.Vector3()).set(x, 0, z); e.netYaw = yaw; e.hp = hp;
     const dead = !!(f & 1);
     if (dead && !e.dead) e.g.visible = false;
-    e.dead = dead; e.visible = !!(f & 2); e.state = STATES[f >> 2];
+    e.dead = dead; e.visible = !!(f & 2); e.state = STATES[(f >> 2) & 3]; e.exposed = !!(f & 16);
     if (e.visible) e.seenAt = G.elapsed;
   });
   syncBombVisuals(s.bo);
@@ -315,6 +316,7 @@ function applyFx(ev) {
       break;
     }
     case 'boom': explosionFx(new THREE.Vector3(...ev.p)); break;
+    case 'mortar': clientMortar(ev); break;
     case 'burst': burst(new THREE.Vector3(...ev.p), ev.c, ev.n, ev.pw); break;
     case 'say': say(ev.text, ev.time); break;
     case 'feed': feed(ev.text); break;

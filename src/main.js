@@ -15,6 +15,7 @@ import { updateUI, drawMap, updateMarker } from './ui/hud.js';
 import { setupCoopPanel } from './ui/menu.js';
 import { updateAvatars } from './game/avatars.js';
 import { updateTurrets } from './game/turrets.js';
+import { updateShells, updateMarkers } from './game/bosses.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -51,6 +52,8 @@ function step(dt) {
   updateDowned(dt);
   updateBots(dt);
   updateTurrets(dt);
+  updateShells(dt);
+  updateMarkers(dt);
   updateProjectiles(dt);
   updateBombs(dt);
   updateEffects(dt);
@@ -69,6 +72,7 @@ function clientStep(dt) {
   for (const e of G.enemies) if (!e.dead) poseEnemy(e, dt);
   updateProjectiles(dt);
   updateEffects(dt);
+  updateMarkers(dt);
 }
 
 let last = performance.now();

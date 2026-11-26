@@ -249,6 +249,69 @@ async function mission04() {
   check('final push survived -> mission won', S().status === 'won', S().status);
 }
 
+async function mission05() {
+  await click('nextBtn');
+  check('next mission -> 05 briefing', S().status === 'briefing' && S().mission === 'm05', S().mission);
+  check('storm environment + Calder Dam level', G.level.id === 'calder' && G.env.sky === '#3c4750');
+  await click('startBtn'); godMode();
+
+  // Bulwark shield: bullets from the front are stopped, from behind they hurt, grenades ignore it.
+  const bw = G.enemies.find(e => e.type.name === 'Bulwark');
+  const fwd = new THREE.Vector3(-Math.sin(bw.yaw), 0, -Math.cos(bw.yaw));
+  let hp = bw.hp; damageEnemy(bw, 31, false, G.local, { dir: fwd.clone().negate() });
+  check('Bulwark shield stops frontal fire', bw.hp === hp && document.getElementById('hitmarker').classList.contains('blocked'), hp + ' -> ' + bw.hp);
+  hp = bw.hp; damageEnemy(bw, 31, false, G.local, { dir: fwd.clone() });
+  check('Bulwark takes damage from behind', bw.hp === hp - 31, hp + ' -> ' + bw.hp);
+  hp = bw.hp; damageEnemy(bw, 40, false, G.local, { explosive: true });
+  check('grenades ignore the shield', bw.hp === hp - 40, hp + ' -> ' + bw.hp);
+
+  teleport(-33, -8); await holdE(3.3);
+  check('door override opens the turbine hall', S().objective === 1 && G.props.hallWest.style === 'open' && !G.props.hallWest.mover.enabled, S().objective);
+  teleport(25.5, -12.6); await holdE(3.8); await waitSim(1.5);   // the checkpoint follows a scripted radio pause
+  check('logs pulled -> checkpoint + spillway door opens', S().objective === 2 && G.checkpoint?.name === 'Logs secured' && G.props.hallSouth.style === 'open', S().objective + ' ' + G.checkpoint?.name);
+
+  for (const x of [-20, 0, 20]) { teleport(x, 26.4); await holdE(2.9); }
+  check('three gates opened -> boss objective', S().objective === 3 && G.fired.has('gate-1') && G.fired.has('gate-2'), S().objective + ' ' + [...G.fired].join(','));
+  let boss = G.enemies.find(e => e.def.tag === 'warden');
+  await frames(3);
+  check('Spillway Warden spawns with a health bar', !!boss && document.getElementById('bossBar').classList.contains('on'), boss?.hp);
+  check('boss objective marker tracks the Warden', !!document.getElementById('objectiveMarker').querySelector('span').textContent);
+
+  // Armour: almost nothing gets through until the vents open; core hits double while exposed.
+  boss.exposed = false; hp = boss.hp; damageEnemy(boss, 100, false, G.local, { dir: new THREE.Vector3(0, 0, 1) });
+  check('Warden armour soaks damage while closed', Math.abs((hp - boss.hp) - 12) < .01, (hp - boss.hp).toFixed(1));
+  boss.exposed = true; hp = boss.hp; damageEnemy(boss, 100, true, G.local, { dir: new THREE.Vector3(0, 0, 1) });
+  check('exposed core takes double damage', Math.abs((hp - boss.hp) - 200) < .01, (hp - boss.hp).toFixed(1));
+
+  // A real bullet aimed at the exposed core hits the core sphere (it protrudes past the hull).
+  G.simSteps = 0;
+  const bf = new THREE.Vector3(-Math.sin(boss.yaw), 0, -Math.cos(boss.yaw));
+  const core = boss.pos.clone().addScaledVector(bf, 1.85).setY(2.45), from = core.clone().addScaledVector(bf, 6);
+  boss.exposed = true; hp = boss.hp;
+  projectile(from, core.clone().sub(from).normalize(), 240, 31, G.local);
+  G.simSteps = 1; await frames(3); G.simSteps = 6;
+  check('bullet on the exposed core: headshot x armour bonus', Math.abs((hp - boss.hp) - 31 * 1.55 * 2) < .5, (hp - boss.hp).toFixed(1));
+
+  let sawMortar = false;
+  teleport(0, 8); G.simSteps = 6;
+  await waitSim(6, () => { if (G.markers.length) sawMortar = true; });
+  check('Warden lobs mortars with a warning ring', sawMortar);
+  const n0 = G.enemies.length; boss.hp = boss.maxHp * .55; await waitSim(.4);
+  check('phase 2 at 60%: reinforcements', boss.phase === 2 && G.enemies.length === n0 + 2, 'phase=' + boss.phase + ' +' + (G.enemies.length - n0));
+
+  // Die, retry from the "Gates open" checkpoint: the Warden comes back at full health.
+  G.local.health = 100; G.local.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null);
+  await frames(2);
+  check('death during the boss fight', S().status === 'lost', S().status);
+  await click('retryBtn'); godMode();
+  boss = G.enemies.find(e => e.def.tag === 'warden' && !e.dead);
+  check('retry respawns the Warden at full health', S().objective === 3 && !!boss && boss.hp === boss.maxHp, 'objective=' + S().objective + ' hp=' + boss?.hp);
+
+  damageEnemy(boss, 1e6, false, G.local, { explosive: true });
+  await waitSim(6);
+  check('Warden destroyed -> Act I complete', S().status === 'won' && /Halvard/.test(document.getElementById('menuText').textContent), S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -258,6 +321,7 @@ async function run() {
   await mission02();
   await mission03();
   await mission04();
+  await mission05();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

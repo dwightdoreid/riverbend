@@ -44,3 +44,14 @@
 .coop .status{color:#b8cac7;margin:10px 0 0;min-height:1em}
 .coop .fine{font-size:10px;color:#91aaa9;margin:10px 0 0}
 @media(max-width:700px){#team{left:12px;top:100px;width:160px}}
+
+#hitmarker.blocked{color:#8fa3a8;font-size:20px}
+
+/* Boss health bar */
+#bossBar{position:absolute;top:52px;left:50%;transform:translateX(-50%);width:min(440px,70vw);text-align:center;display:none}
+#bossBar.on{display:block}
+#bossBar b{font-size:10px;letter-spacing:2.4px;text-transform:uppercase;color:#f8d3b8;text-shadow:0 1px 4px #000}
+#bossBar .bar{height:7px;margin-top:5px;background:#0e1d24cc;border:1px solid #ffffff30;border-radius:4px;overflow:hidden}
+#bossBar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#c2502f,#f48c72);transition:width .2s}
+#bossBar.exposed i{background:linear-gradient(90deg,#f3ba65,#ffe1a0)}
+#bossBar.exposed b::after{content:' · VENTS OPEN';color:var(--amber)}

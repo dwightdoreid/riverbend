@@ -33,8 +33,17 @@ export function alertNoise(pos, r) {
   }
 }
 
-export function damageEnemy(e, amount, head = false, attacker = null) {
+/** opts.dir: bullet direction (for shields); opts.explosive: grenade/blast damage. */
+export function damageEnemy(e, amount, head = false, attacker = null, opts = {}) {
   if (e.dead) return;
+  // Armour hook: shields and boss plating scale damage by hit location and direction.
+  if (e.type.armor) amount *= e.type.armor(e, head, opts.dir ?? null, !!opts.explosive);
+  if (amount <= 0) {
+    if (attacker?.local) { showHit('blocked'); sound('reload', .5); }
+    else if (attacker) fxTo(attacker.id, { t: 'hit', kill: 'blocked' });
+    e.state = 'engage'; e.memory = 7; if (attacker) { e.lastKnown.copy(attacker.pos); e.target = attacker; }
+    return;
+  }
   e.hp -= amount; e.flash = .13; e.state = 'engage'; e.memory = 7; e.shot = Math.max(e.shot, .4);
   if (attacker) { e.lastKnown.copy(attacker.pos); e.target = attacker; }
   const kill = e.hp <= 0;
@@ -152,7 +161,7 @@ export function updateProjectiles(dt) {
       const h = p.pos.clone().addScaledVector(dir, nearest);
       if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
       else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
-      else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner); burst(h, 0xd7c599, 4, 1.3); }
+      else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir }); burst(h, 0xd7c599, 4, 1.3); }
       else { impact(wall.point); if (wall.mover?.onHit && !p.visual) wall.mover.onHit(p.damage, p.hostile); }
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
     }
@@ -202,7 +211,7 @@ function explode(b) {
   for (const e of G.enemies) {
     if (e.dead) continue;
     const target = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), d = target.distanceTo(p);
-    if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner);
+    if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner, { explosive: true });
   }
   for (const pl of G.players) {
     if (!isActive(pl)) continue;

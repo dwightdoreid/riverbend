@@ -134,5 +134,10 @@ There are 13 environments, and some are reused with different lighting or layout
    - enemy scaling
    - dropping in at checkpoints
    - a team health panel
-4. **Phase 3, content in batches:** Act I (03–05), then Act II, III and IV. Each new mission brings one new mechanic.
+4. **Phase 3, content in batches:** each new mission brings one new mechanic.
+   - **Done: Act I (missions 01–05).**
+     - 03 *Switchback*: escort and the SG-8 shotgun.
+     - 04 *Hold Fast*: turrets, generators and survive waves.
+     - 05 *Spillway*: the Bulwark, doors, the Spillway Warden boss, and the Halvard reveal.
+   - **Next:** Act II, *Load Shed*, in Port Calder (missions 06–10).
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

@@ -10,6 +10,7 @@ import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
 import { spawnProps, spawnPickups, repairProp } from './props.js';
 import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
+import { clearBossFx } from './bosses.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive } from './combat.js';
@@ -41,6 +42,9 @@ function loadLevel(level) {
     batches.get(k).items.push(o.matrixWorld.clone());
   });
   const root = new THREE.Group();
+  // Lights placed by the level (fixed count per level, so no shader recompiles mid-mission).
+  const lights = []; w.traverse(o => { if (o.isLight) lights.push(o); });
+  for (const l of lights) { root.add(l); if (l.target) root.add(l.target); }
   for (const b of batches.values()) {
     const m = new THREE.InstancedMesh(b.geo, b.mat, b.items.length);
     m.castShadow = b.cast; m.receiveShadow = true;
@@ -58,7 +62,7 @@ export function prepareMission(mission, checkpoint = null) {
   loadLevel(level);
   G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}) };
   applyEnvironment(G.env);
-  clearCombat(); clearRadio(); clearTurrets();
+  clearCombat(); clearRadio(); clearTurrets(); clearBossFx();
   if (G.dynRoot) G.dynRoot.removeFromParent();
   G.dynRoot = new THREE.Group(); scene.add(G.dynRoot);
   clearMovers();
@@ -157,7 +161,11 @@ export function objectiveTargets(o = currentObjective()) {
   if (o.type === 'collect') return o.targets.filter(t => !G.objState.collected.has(t));
   return o.target ? [o.target] : [];
 }
-export const objectivePositions = () => objectiveTargets().map(posOf);
+export function objectivePositions() {
+  const o = currentObjective();
+  if (o?.type === 'kill') return G.enemies.filter(e => !e.dead && e.def.tag === o.tag).map(e => e.pos.clone().setY(e.type.centerY));
+  return objectiveTargets().map(posOf);
+}
 
 /** The objective position nearest to player p (for the HUD marker). */
 export function objectivePosFor(p) {
@@ -234,6 +242,9 @@ export function updateObjective(dt) {
     if (G.objState.hold >= o.time) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'escort') {
     updateEscort(dt, o);
+  } else if (o.type === 'kill') {
+    const tagged = G.enemies.filter(e => e.def.tag === o.tag);
+    if (tagged.length && tagged.every(e => e.dead)) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'eliminate') {
     if (G.elapsed > 1 && !G.enemies.some(e => !e.dead)) completeObjective(G.local);
   }

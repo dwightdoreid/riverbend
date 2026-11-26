@@ -31,6 +31,34 @@ export const ENEMY_TYPES = {
       return [];
     },
   },
+  // Heavy with a front shield: bullets from the front are stopped (the sensor above it takes
+  // half damage). Flank it, or use grenades, which ignore the shield.
+  bulwark: {
+    name: 'Bulwark', hp: 340, color: 0x6d6a5e,
+    hover: 0, bob: .02, eyeY: 2.3, muzzle: [.75, 1.5, -.5], centerY: 1.3,
+    hitParts: [{ y: 1.3, r: .9, head: false }, { y: 2.35, r: .3, head: true }],
+    speed: { patrol: .9, search: 1.3, close: 1.25, retreat: 1.0, strafe: .55 },
+    sight: { stand: 30, crouch: 23, crouchStill: 17, fov: .2 },
+    range: { far: 18, near: 6 }, strafeSwap: 2.6,
+    gun: { speed: 52, damage: 13, cooldown: [1.5, .6], spread: [.012, .14], sound: 'shotgun' },
+    armor(e, head, dir, explosive) {
+      if (explosive || !dir) return 1;
+      const fwd = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw));
+      const front = dir.x * fwd.x + dir.z * fwd.z < -.35;     // bullet travelling against our facing
+      return front ? (head ? .5 : 0) : 1;
+    },
+    build(g, bodyMat) {
+      box(g, 0, 1.3, .1, 1.2, 1.3, .9, bodyMat); box(g, 0, .45, .1, 1.3, .5, 1.1, 'dark');
+      for (const x of [-.5, .5]) box(g, x, .3, .1, .35, .6, 1.3, 'edge');                   // treads
+      const shield = new THREE.MeshStandardMaterial({ color: 0x66717a, metalness: .25, roughness: .5 });   // low metalness: no env map, so metal would render black
+      box(g, 0, 1.25, -.55, 1.7, 1.75, .12, shield);                                       // front shield
+      box(g, 0, 1.95, -.62, 1.5, .1, .04, 'amber'); box(g, 0, .55, -.62, 1.5, .1, .04, 'amber');
+      box(g, 0, 2.35, 0, .5, .32, .45, 'dark');
+      box(g, 0, 2.38, -.23, .3, .1, .03, glowEye(0xffb24a, 0xff8a2a));
+      rod(g, [.75, 1.5, .1], [.75, 1.5, -.75], .09, 'dark', 8); box(g, .75, 1.5, .1, .3, .3, .5, 'edge');
+      return [];
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,
@@ -76,7 +104,7 @@ export function addEnemy(def, alertAt = null) {
   const home = freePoint(...def.at), patrol = freePoint(...(def.patrol ?? def.at));
   const e = {
     id: i, def, type: T, g, mat: bodyMat, rotors, cone, pos: home.clone(), home, patrol, dest: patrol.clone(),
-    hp: T.hp * hpScale(), yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,
+    hp: T.hp * hpScale(), maxHp: T.hp * hpScale(), yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,
     shot: 1 + i * .17, sense: i * .027, visible: false, seenAt: -99, flash: 0, dead: false, dodge: i % 2 ? 1 : -1, target: null,
   };
   // Wave enemies (spawned with an alert point) hunt: they always know roughly where players are.
@@ -89,14 +117,14 @@ export function addEnemy(def, alertAt = null) {
 }
 
 /** Co-op scaling: machines get tougher with more players (counts scale in wave events). */
-const hpScale = () => isClient() ? 1 : 1 + .4 * (G.players.length - 1);
+const hpScale = () => 1 + .4 * (G.players.length - 1);   // same on host and clients (same roster)
 
 export function spawnEnemies(defs) {
   G.enemies.length = 0;
   for (const def of defs) addEnemy(def);
 }
 
-function botMove(e, target, speed, dt) {
+export function botMove(e, target, speed, dt) {
   const d = target.clone().sub(e.pos); d.y = 0;
   if (d.length() < .6) return;
   d.normalize();
@@ -112,7 +140,7 @@ function botMove(e, target, speed, dt) {
 }
 
 /** Move toward target, routing around obstacles when the straight line is blocked. */
-function navigate(e, target, speed, dt) {
+export function navigate(e, target, speed, dt) {
   e.navTimer = (e.navTimer ?? 0) - dt;
   if (e.navTimer <= 0 || !e.navGoal || e.navGoal.distanceTo(target) > 2) {
     e.navTimer = .6 + Math.random() * .3;
@@ -127,7 +155,7 @@ function navigate(e, target, speed, dt) {
   botMove(e, goal, speed, dt);
 }
 
-function nearestPlayer(pos) {
+export function nearestPlayer(pos) {
   let best = null, bestD = Infinity;
   for (const p of G.players) if (isActive(p)) { const d = p.pos.distanceTo(pos); if (d < bestD) { best = p; bestD = d; } }
   return best;
@@ -137,7 +165,7 @@ const flatDist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 /** Line of fire to a point inside an object's own collision box (truck, generator, turret):
  *  hitting that object's box counts as a clear shot. */
-function canHit(from, to, mover) {
+export function canHit(from, to, mover) {
   const d = to.clone().sub(from), dist = d.length(), hit = castSolid(from, d.divideScalar(dist), dist - .1);
   return !hit || (mover && hit.mover === mover);
 }
@@ -158,7 +186,7 @@ function harassTarget(e) {
   return prop && prop.root.visible ? prop : null;
 }
 
-function shootAt(e, aim, dist) {
+export function shootAt(e, aim, dist) {
   const T = e.type, m = T.muzzle;
   const origin = e.pos.clone().add(new THREE.Vector3(m[0], m[1], m[2]).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw));
   const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
@@ -190,6 +218,7 @@ export function updateBots(dt) {
     e.mat.emissive.setHex(e.flash > 0 ? 0x9c532c : 0x000000);
     if (e.target && !isActive(e.target)) { e.target = null; e.visible = false; }
     const from = e.pos.clone().add(new THREE.Vector3(0, T.eyeY, 0));
+    if (T.update) { T.update(e, dt, from); poseEnemy(e, dt); continue; }   // bosses run their own logic
 
     e.sense -= dt;
     if (e.sense <= 0) {
@@ -266,6 +295,7 @@ export function poseEnemy(e, dt) {
   e.g.position.copy(e.pos); e.g.position.y = Math.sin(G.elapsed * 2.7 + e.id) * e.type.bob; e.g.rotation.y = e.yaw;
   for (const r of e.rotors) r.rotation.y += dt * 38;
   if (e.cone) e.cone.material.color.setHex(CONE_COLORS[e.state] ?? CONE_COLORS.patrol);
+  e.type.pose?.(e, dt);
 }
 
 /** Serializable enemy state for checkpoints (and later, network sync). */

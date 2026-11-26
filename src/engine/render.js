@@ -39,8 +39,8 @@ export const ENV_PRESETS = {
     sun: { color: 0xffb27a, intensity: 2.3, pos: [-70, 26, -45] }, sightScale: .9,
   },
   storm: {
-    sky: '#3c4750', fog: [30, 140], hemi: [0x8796a3, 0x2a2f33, 1.1], exposure: 1,
-    sun: { color: 0xc7d3dc, intensity: .9, pos: [-20, 70, 10] }, sightScale: .8,
+    sky: '#3c4750', fog: [30, 140], hemi: [0xa4b3bf, 0x4a4e4f, 1.9], exposure: 1.1,
+    sun: { color: 0xd6e0e8, intensity: 1.25, pos: [-35, 70, -45] }, sightScale: .8,
   },
 };
 

@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 73 scripted solo checks (missions 01–04) in headless Chrome
+python3 tools/smoke_test.py                  # 91 scripted solo checks (missions 01–05) in headless Chrome
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
@@ -58,10 +58,12 @@ src/
     nav.js            walkability grid + A* pathfinding for machines
     avatars.js        teammates' bodies and name tags
     turrets.js        deployable auto-turrets
+    bosses.js         boss enemy types (Spillway Warden), mortar shells and warning rings
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill) and reusable pieces (kit.js)
+  levels/             level geometry (riverbend, switchback, fernhill, calder) and reusable pieces (kit.js).
+                      Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
 tools/                smoke_test.py (solo), coop_test.py (two-browser co-op)
 substation_fps.html   the original single-file version, kept for reference
@@ -76,11 +78,11 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck` and `barricade`. Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade` and `door` (`open` clears it). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
-- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`). With `harass: propId`, an enemy attacks that prop when no player is in sight.
+- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, and the boss `warden`). `tag` names an enemy for `kill` objectives. With `harass: propId`, an enemy attacks that prop when no player is in sight.
 - **onStart**: events that run when play begins.
 - **triggers**: `{ id, when, do: [events], objective? }`.
 
@@ -90,6 +92,7 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - `reach`: get within `radius` of the target.
 - `hold`: stay within `radius` for `time` seconds while waves come in.
 - `eliminate`: destroy every machine.
+- `kill`: destroy the enemies with a given `tag`, such as a boss. The objective marker follows them.
 - `survive`: last `time` seconds anywhere. With `guard: [propIds]`, the objective box shows those props' health.
 - `escort`: drive the mission's escort vehicle up to waypoint `until`. It moves only while a player is within `radius` and no machine is within `contactRadius`.
 - Any objective can set `reach` to change the interact distance (default 2.6 m).

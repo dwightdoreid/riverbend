@@ -32,8 +32,9 @@ function updateRadio(dt) {
 export function say(text, time = 3) { $('toast').textContent = text; ui.toastLeft = time; $('toast').style.opacity = 1; }
 export function feed(text) { G.messages.unshift({ text, t: 4 }); if (G.messages.length > 3) G.messages.pop(); fxAll({ t: 'feed', text }); }
 
+/** kill: true (kill), false (hit) or 'blocked' (armour/shield absorbed it). */
 export function showHit(kill) {
-  ui.hitLeft = .15; $('hitmarker').classList.toggle('kill', kill);
+  ui.hitLeft = .15; $('hitmarker').classList.toggle('kill', kill === true); $('hitmarker').classList.toggle('blocked', kill === 'blocked');
 }
 export function showDamage(p, source) {
   ui.damageFlash = .7;
@@ -116,6 +117,13 @@ export function updateUI(dt) {
   updateRadio(dt);
   $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
   updateDownedUI(p);
+  const boss = G.enemies.find(e => e.type.boss && !e.dead);
+  $('bossBar').classList.toggle('on', !!boss);
+  if (boss) {
+    $('bossName').textContent = boss.type.name;
+    $('bossFill').style.width = Math.max(0, boss.hp / boss.maxHp * 100) + '%';
+    $('bossBar').classList.toggle('exposed', !!boss.exposed);
+  }
   if (G.frame % 10 === 0) updateTeam();
 }
 

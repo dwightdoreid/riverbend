@@ -144,6 +144,26 @@ const PROP_TYPES = {
     };
   },
 
+  // Heavy sliding door filling a gap in level walls. Style 'open' clears it.
+  door(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
+    const w = def.width ?? 4, h = def.height ?? 4;
+    box(g, 0, h / 2, 0, w, h, .3, 'edge');
+    for (let i = 0; i < 4; i++) box(g, 0, .5 + i * (h - 1) / 3, -.17, w * .96, .14, .04, i % 2 ? 'amber' : 'dark');
+    const lamp = box(g, w / 2 + .3, h * .75, -.2, .16, .16, .06, emissive(0xe0503a, 1.4));
+    const fx = Math.cos(def.yaw ?? 0), fz = -Math.sin(def.yaw ?? 0), circles = [];
+    for (let o = -w / 2 + .5; o <= w / 2 - .4; o += .9) circles.push({ x: x + fx * o, z: z + fz * o, r: .55 });
+    const ex = Math.abs(fx) * w / 2 + Math.abs(fz) * .3, ez = Math.abs(fz) * w / 2 + Math.abs(fx) * .3;
+    const mover = addMover({ circles, box: new THREE.Box3(new THREE.Vector3(x - ex, 0, z - ez), new THREE.Vector3(x + ex, h, z + ez)) });
+    const openMat = emissive(0x5ce08a, 1.4), shutMat = lamp.material;
+    return {
+      root, mover, pos: new THREE.Vector3(x, 1.4, z),
+      setStyle(s) { const open = s === 'open'; g.visible = !open; mover.enabled = !open; lamp.material = open ? openMat : shutMat; },
+      update() {},
+    };
+  },
+
   // Diesel generator set. Styles: 'running' (green lamp, exhaust shimmer), 'tripped', 'wrecked'.
   generator(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -171,7 +191,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed' };
 
 export function spawnProps(defs) {
   G.props = {};
