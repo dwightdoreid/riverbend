@@ -3,6 +3,7 @@
 import { THREE } from '../engine/three.js';
 import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
 import { G } from './state.js';
+import { addMover } from './world.js';
 
 const emissive = (color, intensity = 1) => new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: intensity, roughness: .5 });
 
@@ -85,9 +86,64 @@ const PROP_TYPES = {
     };
     return prop;
   },
+
+  // Mobile substation truck for escort missions. Its pose is driven by the escort system.
+  truck(parent, def) {
+    const root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g);
+    const paint = new THREE.MeshStandardMaterial({ color: 0xe3dccb, roughness: .7 });
+    const lamp = emissive(0xfff1c9, 2), beacon = emissive(0xf3a23a, 2.5);
+    box(g, 0, 1.55, -2.5, 2.4, 2, 2, paint); box(g, 0, 1.95, -3.52, 2.1, .8, .05, 'glass');   // cab + windscreen
+    box(g, 0, .9, .7, 2.5, .35, 5.6, 'edge');                                                  // flatbed
+    box(g, 0, 2.05, .9, 2.1, 1.9, 3.4, 'tank'); box(g, 0, 3.05, .9, 2.2, .16, 3.5, 'tank2');   // transformer tank
+    for (let z = -.4; z <= 2.2; z += .32) box(g, 1.15, 2, z, .12, 1.5, .08, 'tank2');           // radiator fins
+    for (const x of [-.6, 0, .6]) { cyl(g, x, 3.45, .2, .1, .14, .7, 'ceramic', 8); cyl(g, x, 3.85, .2, .05, .05, .1, 'conductor', 6); }
+    box(g, -1.0, 2.1, 2.9, .5, 1.6, .5, 'dark');                                               // control cabinet
+    for (const z of [-2.5, .2, 2.4]) for (const x of [-1.2, 1.2]) { const w = cyl(g, x, .5, z, .5, .5, .4, 'dark', 12); w.rotation.z = Math.PI / 2; }
+    for (const x of [-.8, .8]) box(g, x, 1.1, -3.52, .3, .2, .05, lamp);                       // headlights
+    box(g, 0, 2.62, -2.5, .5, .14, .3, beacon);                                                // amber beacon
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    const box3 = new THREE.Box3();
+    const mover = addMover({ circles: [{ x: 0, z: 0, r: 1.45 }, { x: 0, z: 0, r: 1.45 }, { x: 0, z: 0, r: 1.45 }], box: box3 });
+    const prop = {
+      root, mover, pos: new THREE.Vector3(def.at[0], 1.6, def.at[1]), yaw: def.yaw ?? 0,
+      setPose(x, z, yaw) {
+        prop.pos.set(x, 1.6, z); prop.yaw = yaw; g.position.set(x, 0, z); g.rotation.y = yaw;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        [-2.3, 0, 2.3].forEach((o, i) => { mover.circles[i].x = x - fx * o; mover.circles[i].z = z - fz * o; });
+        const ex = Math.abs(fx) * 3.6 + Math.abs(fz) * 1.25, ez = Math.abs(fz) * 3.6 + Math.abs(fx) * 1.25;
+        box3.min.set(x - ex, 0, z - ez); box3.max.set(x + ex, 3.2, z + ez);
+      },
+      setStyle(s) { root.visible = s !== 'gone'; mover.enabled = s !== 'gone'; },
+      update(t) { beacon.emissiveIntensity = Math.sin(t * 9) > 0 ? 3 : .3; },
+    };
+    prop.setPose(def.at[0], def.at[1], prop.yaw);
+    return prop;
+  },
+
+  // Jersey barriers and wreckage blocking a road. Style 'gone' clears it.
+  barricade(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
+    const w = def.width ?? 9;
+    for (let i = 0; i < Math.round(w / 2.1); i++) {
+      const bx = -w / 2 + 1.05 + i * 2.1, b = box(g, bx, .45, (i % 2) * .5, 2, .9, .55, 'concrete'); b.rotation.y = (i % 3 - 1) * .12;
+      box(g, bx, .75, (i % 2) * .5, 2.02, .14, .58, i % 2 ? 'orange' : 'white');
+    }
+    box(g, .8, .9, -1.2, 2.4, 1.2, 1.4, 'crate'); box(g, -2.4, .6, -1, 1.6, .9, 1.1, 'dark');
+    const fx = Math.cos(def.yaw ?? 0), fz = -Math.sin(def.yaw ?? 0);
+    const circles = []; for (let o = -w / 2; o <= w / 2; o += 1.4) circles.push({ x: x + fx * o, z: z + fz * o, r: .9 });
+    const ex = Math.abs(fx) * w / 2 + .8, ez = Math.abs(fz) * w / 2 + .8;
+    const mover = addMover({ circles, box: new THREE.Box3(new THREE.Vector3(x - ex, 0, z - ez), new THREE.Vector3(x + ex, 1.4, z + ez)) });
+    return {
+      root, mover, pos: new THREE.Vector3(x, 1, z),
+      setStyle(s) { root.visible = s !== 'gone'; mover.enabled = s !== 'gone'; },
+      update() {},
+    };
+  },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present' };
 
 export function spawnProps(defs) {
   G.props = {};

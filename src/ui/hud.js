@@ -40,7 +40,7 @@ export function showDamage(p, source) {
   if (source) { const d = source.clone().sub(p.pos), angle = Math.atan2(d.x, -d.z) + p.yaw; $('damageArrow').style.transform = 'rotate(' + angle + 'rad)'; }
   $('health').textContent = Math.ceil(p.health);
 }
-export function resetHUD() { ui.toastLeft = ui.hitLeft = ui.damageFlash = 0; ui.objKey = ''; }
+export function resetHUD() { ui.toastLeft = ui.hitLeft = ui.damageFlash = 0; ui.objKey = ''; ui.slotKey = ''; updateHUD(); }
 
 function healthDisplay(p) {
   $('health').textContent = Math.ceil(p.health); $('healthFill').style.width = p.health + '%';
@@ -57,6 +57,11 @@ export function updateHUD() {
   $('weaponName').textContent = w ? w.name : 'FRAG / GRENADE';
   $('ammoBig').innerHTML = w ? a.mag + ' <span>/ ' + a.reserve + '</span>' : p.grenades + ' <span>THROWABLES</span>';
   $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades;
+  const slots = [...p.loadout, 'grenade'], key = slots.join();
+  if (ui.slotKey !== key) {
+    ui.slotKey = key;
+    $('weapons').innerHTML = slots.map((w, i) => '<button data-weapon="' + w + '">' + (i + 1) + ' ' + (w === 'grenade' ? 'FRAG' : WEAPONS[w].short.toUpperCase()) + '</button>').join('');
+  }
   document.querySelectorAll('[data-weapon]').forEach(b => b.classList.toggle('active', b.dataset.weapon === p.weapon));
 }
 
@@ -141,13 +146,17 @@ function updateTeam() {
 const mc = $('map').getContext('2d'), MW = 296, MH = 272;
 export function drawMap() {
   const p = G.local, map = G.level.map;
-  const mx = x => (x - map.min[0]) / (map.max[0] - map.min[0]) * MW, mz = z => (z - map.min[1]) / (map.max[1] - map.min[1]) * MH;
+  // Keep the map's proportions. Small levels fit entirely; big ones scroll with the player.
+  const W = map.max[0] - map.min[0], H = map.max[1] - map.min[1], fit = Math.min(MW / W, MH / H), sc = Math.max(fit, 2.4);
+  const follow = (lo, hi, span, v) => span * sc <= (lo === map.min[0] ? MW : MH) ? (lo + hi) / 2 : THREE.MathUtils.clamp(v, lo + (lo === map.min[0] ? MW : MH) / 2 / sc, hi - (lo === map.min[0] ? MW : MH) / 2 / sc);
+  const cx = follow(map.min[0], map.max[0], W, p.pos.x), cz = follow(map.min[1], map.max[1], H, p.pos.z);
+  const mx = x => MW / 2 + (x - cx) * sc, mz = z => MH / 2 + (z - cz) * sc;
   mc.clearRect(0, 0, MW, MH); mc.fillStyle = '#172d35'; mc.fillRect(0, 0, MW, MH);
   const [[ox0, oz0], [ox1, oz1]] = map.outline;
   mc.strokeStyle = '#607a7d'; mc.lineWidth = 1; mc.strokeRect(mx(ox0), mz(oz0), mx(ox1) - mx(ox0), mz(oz1) - mz(oz0));
   mc.fillStyle = '#435852';
   for (const b of world.solids) if ((b.max.x - b.min.x) > 2 && (b.max.z - b.min.z) > 1) mc.fillRect(mx(b.min.x), mz(b.min.z), mx(b.max.x) - mx(b.min.x), mz(b.max.z) - mz(b.min.z));
-  mc.strokeStyle = '#6b8178';
+  mc.strokeStyle = '#6b8178'; mc.lineWidth = map.lineWidth ?? 1;
   for (const [x0, z0, x1, z1] of map.lines ?? []) { mc.beginPath(); mc.moveTo(mx(x0), mz(z0)); mc.lineTo(mx(x1), mz(z1)); mc.stroke(); }
   for (const op of objectivePositions()) {
     mc.fillStyle = '#f3ba65'; mc.save(); mc.translate(mx(op.x), mz(op.z)); mc.rotate(Math.PI / 4); mc.fillRect(-4, -4, 8, 8); mc.restore();

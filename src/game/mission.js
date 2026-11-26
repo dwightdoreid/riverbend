@@ -5,7 +5,7 @@ import { THREE } from '../engine/three.js';
 import { scene, applyEnvironment, ENV_PRESETS } from '../engine/render.js';
 import { sound } from '../engine/audio.js';
 import { G } from './state.js';
-import { clearWorld } from './world.js';
+import { clearWorld, clearMovers } from './world.js';
 import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
 import { spawnProps, spawnPickups } from './props.js';
@@ -60,13 +60,15 @@ export function prepareMission(mission, checkpoint = null) {
   clearCombat(); clearRadio();
   if (G.dynRoot) G.dynRoot.removeFromParent();
   G.dynRoot = new THREE.Group(); scene.add(G.dynRoot);
+  clearMovers();
   G.mission = mission; G.elapsed = 0; G.protectUntil = SPAWN_PROTECTION;
   G.messages.length = 0; G.scripts = []; G.fired = new Set();
   G.objective = 0; G.objState = freshObjState(); G.objStartRan = false; G.missionStartRan = false;
   spawnProps(mission.props);
+  setupEscort(mission.escort);
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
-  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length]); p.flashlight = false; });
+  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
   updateHUD();
 }
@@ -81,6 +83,64 @@ export function beginPlay(fresh) {
   }
   startObjectiveEvents();
 }
+
+// ---------------------------------------------------------------- escort
+//
+// Mission-level `escort: { prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`.
+// Escort objectives ({ type: 'escort', until: waypointIndex }) drive the vehicle along the path
+// while a player stays within `radius`, pausing when machines are within `contactRadius`.
+
+function setupEscort(cfg) {
+  G.escort = null;
+  if (!cfg) return;
+  const pts = cfg.path.map(([x, z]) => new THREE.Vector2(x, z)), cum = [0];
+  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
+  G.escort = { cfg, pts, cum, s: 0, hp: cfg.hp ?? 1500, maxHp: cfg.hp ?? 1500, status: 'waiting' };
+  const prop = G.props[cfg.prop];
+  prop.mover.onHit = (dmg, hostile) => { if (hostile) damageEscort(dmg); };
+  poseEscort();
+}
+
+function pointAt(s) {
+  const E = G.escort, { pts, cum } = E;
+  s = THREE.MathUtils.clamp(s, 0, cum[cum.length - 1]);
+  let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+  const t = (s - cum[i - 1]) / Math.max(1e-6, cum[i] - cum[i - 1]);
+  return pts[i - 1].clone().lerp(pts[i], t);
+}
+
+/** Places the escort prop at the current path distance (also used by co-op clients). */
+export function poseEscort() {
+  const E = G.escort; if (!E) return;
+  const p = pointAt(E.s), a = pointAt(E.s - 2.5), b = pointAt(E.s + 2.5);
+  const yaw = Math.atan2(-(b.x - a.x), -(b.y - a.y));
+  G.props[E.cfg.prop].setPose(p.x, p.y, yaw);
+}
+
+function damageEscort(dmg) {
+  const E = G.escort;
+  if (!E || E.hp <= 0 || G.status !== 'playing') return;
+  E.hp = Math.max(0, E.hp - dmg);
+  if (E.hp === 0) {
+    feed('The truck is destroyed');
+    runEvents(E.cfg.onDestroyed ?? [{ do: 'fail' }]);
+  } else if (E.hp < E.maxHp * .3 && !E.warned) {
+    E.warned = true;
+    radio('Mara · Ops', 'The truck can\'t take much more. Get those machines off it!');
+  }
+}
+
+function updateEscort(dt, o) {
+  const E = G.escort, prop = G.props[E.cfg.prop], target = E.cum[Math.min(o.until, E.cum.length - 1)];
+  const near = G.players.filter(isActive).filter(p => flat(p.pos, prop.pos) < (E.cfg.radius ?? 10));
+  const contact = G.enemies.some(e => !e.dead && flat(e.pos, prop.pos) < (E.cfg.contactRadius ?? 9));
+  const ahead = pointAt(E.s + 4.2), blocked = G.players.some(p => isActive(p) && Math.hypot(p.pos.x - ahead.x, p.pos.z - ahead.y) < 1.9);
+  E.status = !near.length ? 'waiting' : contact ? 'contact' : blocked ? 'blocked' : 'moving';
+  if (E.status === 'moving') { E.s = Math.min(target, E.s + (E.cfg.speed ?? 2.4) * dt); poseEscort(); }
+  if (E.s >= target - .01) completeObjective(near[0] ?? G.local);
+}
+
+const ESCORT_STATUS = { waiting: 'stopped · stay close', contact: 'stopped · machines nearby', blocked: 'stopped · move out of the way', moving: 'moving' };
 
 // ---------------------------------------------------------------- objectives
 
@@ -110,6 +170,10 @@ export function objectiveText() {
   let name = o.name, sub = o.sub ?? '';
   if (o.type === 'collect') name += ` (${G.objState.collected.size}/${o.targets.length})`;
   if (o.type === 'hold') sub += ` · ${Math.floor(Math.min(1, G.objState.hold / o.time) * 100)}%`;
+  if (o.type === 'escort' && G.escort) {
+    const E = G.escort;
+    sub = 'Truck ' + ESCORT_STATUS[E.status] + ' · armour ' + Math.ceil(E.hp / E.maxHp * 100) + '%';
+  }
   return { name, sub };
 }
 
@@ -156,6 +220,8 @@ export function updateObjective(dt) {
       G.objState.hold += dt;
       if (G.objState.hold >= o.time) completeObjective(inside[0]);
     }
+  } else if (o.type === 'escort') {
+    updateEscort(dt, o);
   } else if (o.type === 'eliminate') {
     if (G.elapsed > 1 && !G.enemies.some(e => !e.dead)) completeObjective(G.local);
   }
@@ -221,6 +287,7 @@ const CONDITIONS = {
   hold: t => currentObjective()?.type === 'hold' && G.objState.hold >= t,
   collected: n => G.objState.collected.size >= n,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
+  escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,
 };
 export function checkTriggers() {
   for (const t of G.mission.triggers ?? []) {
@@ -243,6 +310,7 @@ function takeCheckpoint(name = 'Checkpoint') {
     fired: [...G.fired],
     props: Object.fromEntries(Object.values(G.props).map(p => [p.id, p.style])),
     pickups: G.pickups.map(k => k.used),
+    escort: G.escort ? { s: G.escort.s, hp: G.escort.hp } : null,
     enemies: snapshotEnemies(),
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
@@ -264,6 +332,7 @@ function applyCheckpoint(c) {
   for (const [id, style] of Object.entries(c.props)) G.props[id]?.setStyle(style);
   c.pickups.forEach((used, i) => { G.pickups[i].used = used; G.pickups[i].g.visible = !used; });
   restoreEnemies(c.enemies);
+  if (G.escort && c.escort) { G.escort.s = c.escort.s; G.escort.hp = Math.max(c.escort.hp, G.escort.maxHp * .5); poseEscort(); }
   G.players.forEach((p, i) => {
     const s = c.players[i % c.players.length];
     p.pos.set(s.pos[0], 0, s.pos[1]); p.yaw = s.yaw; p.health = Math.max(s.health, 60);

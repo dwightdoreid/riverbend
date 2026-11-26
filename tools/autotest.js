@@ -3,7 +3,7 @@
 // into <pre id="autotest-result"> and document.title, for tools/smoke_test.py to read.
 import { THREE } from '../src/engine/three.js';
 import { G } from '../src/game/state.js';
-import { hurt, projectile } from '../src/game/combat.js';
+import { hurt, projectile, damageEnemy } from '../src/game/combat.js';
 import { litAt } from '../src/game/props.js';
 import { canvas, flashlight } from '../src/engine/render.js';
 
@@ -138,6 +138,62 @@ async function mission02() {
   G.simSteps = 6;
 }
 
+async function mission03() {
+  await click('nextBtn');
+  check('next mission -> 03 briefing', S().status === 'briefing' && S().mission === 'm03', S().mission);
+  check('dusk environment + switchback level', G.level.id === 'switchback' && G.env.sky === '#d9a98a');
+  await click('startBtn'); godMode();
+  check('m03 deploy', S().status === 'playing', S().status);
+  check('loadout buttons: rifle, shotgun, pistol, frag', document.querySelectorAll('#weapons [data-weapon]').length === 4, document.getElementById('weapons').textContent);
+
+  // Shotgun: one shell, eight pellets.
+  await tap('2'); await waitSim(.4);
+  G.local.yaw = Math.PI; G.local.pitch = .5;   // aim up and away from the truck so no pellet hits within a frame
+  const shots0 = S().stats.shots, proj0 = G.projectiles.length;
+  mouse('mousedown', 0); await frames(1); mouse('mouseup', 0);
+  check('shotgun fires 8 pellets per shell', S().weapon === 'shotgun' && S().stats.shots === shots0 + 1 && G.projectiles.length >= proj0 + 8, 'weapon=' + S().weapon + ' projectiles=' + (G.projectiles.length - proj0));
+
+  // Escort rules.
+  const E = G.escort, truck = G.props.truck;
+  teleport(25, 70); await waitSim(.6);
+  const s0 = E.s;
+  check('truck waits when nobody is near', E.status === 'waiting' && E.s === s0, E.status);
+  const behind = () => { const y = truck.yaw; teleport(truck.pos.x + Math.sin(y) * 6.5, truck.pos.z + Math.cos(y) * 6.5, y); };
+  behind(); await waitSim(1.5, behind);
+  check('truck rolls with an escort nearby', E.s > s0 + 1 && E.status === 'moving', E.s.toFixed(1) + ' ' + E.status);
+  const e0 = G.enemies.find(e => !e.dead);
+  e0.pos.set(truck.pos.x + 4, 0, truck.pos.z); e0.memory = 0; e0.state = 'patrol';
+  await waitSim(.3, behind);
+  check('truck stops for nearby machines', E.status === 'contact', E.status);
+  damageEnemy(e0, 999, false, G.local);
+  const hp0 = E.hp, o = truck.pos.clone().add(new THREE.Vector3(6, 0, 0));
+  projectile(o, truck.pos.clone().sub(o).normalize(), 44, 9, null); await frames(3);
+  check('hostile fire damages the truck', E.hp === hp0 - 9, hp0 + ' -> ' + E.hp);
+
+  // Drive to the roadblock, clearing machines that get close (they would stop the truck).
+  G.simSteps = 10;
+  const escortFrame = () => { behind(); for (const e of G.enemies) if (!e.dead && Math.hypot(e.pos.x - truck.pos.x, e.pos.z - truck.pos.z) < 13) damageEnemy(e, 999, false, G.local); };
+  await waitSim(40, () => { escortFrame(); if (G.objective >= 1) G.simSteps = 6; });
+  check('escort reaches the roadblock', S().objective === 1, 'objective=' + S().objective + ' s=' + E.s.toFixed(1));
+  check('ambush spawns at the roadblock', G.enemies.some(e => e.def.harass === 'truck'));
+  teleport(-12.2, 15.6); await holdE(3.8);
+  check('roadblock cleared + checkpoint', S().objective === 2 && G.props.roadblock.style === 'gone' && G.checkpoint?.name === 'Roadblock cleared', S().objective + ' ' + G.checkpoint?.name);
+
+  G.simSteps = 10;
+  await waitSim(120, escortFrame);
+  check('escort triggers fired on the way', ['skimmers-low', 'ridge-sentries', 'halfway', 'last-stand', 'gate'].every(id => G.fired.has(id)), [...G.fired].join(','));
+  check('truck reaches Fernhill -> mission won', S().status === 'won', S().status + ' s=' + E.s.toFixed(1) + '/' + E.cum.at(-1).toFixed(1));
+  G.simSteps = 6;
+
+  // A destroyed truck fails the mission.
+  await click('replayBtn'); godMode();
+  G.escort.hp = 5;
+  const t2 = G.props.truck, o2 = t2.pos.clone().add(new THREE.Vector3(6, 0, 0));
+  G.protectUntil = 0; projectile(o2, t2.pos.clone().sub(o2).normalize(), 44, 9, null);
+  await waitSim(.5);
+  check('destroyed truck fails the mission', S().status === 'lost', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -145,9 +201,10 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   await mission01();
   await mission02();
+  await mission03();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
-  await click('replayBtn'); godMode();
+  await click('restartBtn'); godMode();
 
   check('no runtime errors', errors.length === 0, errors.join(' | '));
   const report = { passed: log.every(l => l.ok), log, errors, drawCalls: S().drawCalls };

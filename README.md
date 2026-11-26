@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 40 scripted solo checks in headless Chrome
+python3 tools/smoke_test.py                  # 55 scripted solo checks (missions 01–03) in headless Chrome
 python3 tools/coop_test.py                   # 32 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
@@ -60,7 +60,7 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend.js) and reusable pieces (kit.js)
+  levels/             level geometry (riverbend.js, switchback.js) and reusable pieces (kit.js)
   missions/           mission definitions plus the campaign order (index.js)
 tools/                smoke_test.py (solo), coop_test.py (two-browser co-op)
 substation_fps.html   the original single-file version, kept for reference
@@ -71,11 +71,13 @@ substation_fps.html   the original single-file version, kept for reference
 Missions are plain data. Copy a file in `src/missions/`, change its contents, then add it to `CAMPAIGN` in `src/missions/index.js`. Mission 02, `m02_lights_out.js`, uses most of the features listed below.
 
 **Mission-level fields**
-- **level**: an id from `src/levels/index.js`. **environment**: `day`, `night` or `storm` (`ENV_PRESETS` in `engine/render.js`).
+- **level**: an id from `src/levels/index.js`. **environment**: `day`, `dusk`, `night` or `storm` (`ENV_PRESETS` in `engine/render.js`).
+- **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel` and `floodlight`. Each has a `style` that events can change.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck` and `barricade`. Each has a `style` that events can change (`gone` removes a truck or barricade).
+- **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
-- **enemies**: `{ type, at, patrol }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`).
+- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`). With `harass: propId`, an enemy attacks that prop when no player is in sight.
 - **onStart**: events that run when play begins.
 - **triggers**: `{ id, when, do: [events], objective? }`.
 
@@ -85,12 +87,14 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - `reach`: get within `radius` of the target.
 - `hold`: stay within `radius` for `time` seconds while waves come in.
 - `eliminate`: destroy every machine.
+- `escort`: drive the mission's escort vehicle up to waypoint `until`. It moves only while a player is within `radius` and no machine is within `contactRadius`.
+- Any objective can set `reach` to change the interact distance (default 2.6 m).
 
 Each objective can have `onStart` and `onComplete` events.
 
 **Events** (`{ do: ..., ... }`): `say`, `radio`, `feed`, `noise`, `investigate`, `propStyle`, `spawn` (enemy waves), `checkpoint`, `wait`, `win` and `fail`. New ones go in the `EVENTS` table in `game/mission.js`.
 
-**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n` and `enemiesLeft: n`.
+**Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n`, `enemiesLeft: n` and `escort: waypointIndex`.
 
 ## Co-op (1–4 players)
 

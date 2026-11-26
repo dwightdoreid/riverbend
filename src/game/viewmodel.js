@@ -23,12 +23,20 @@ function gunModel(type) {
     box(g, 0, -.15, .09, .09, .22, .11, 'dark').rotation.x = -.24;
     rod(g, [0, .017, -.13], [0, .017, -.2], .019, 'dark', 8); box(g, 0, .09, -.115, .017, .03, .023, 'steel');
     box(g, 0, .09, .08, .06, .025, .03, 'dark'); box(g, .067, -.15, .12, .065, .12, .14, 'green');
+  } else if (type === 'shotgun') {
+    box(g, 0, 0, .02, .12, .14, .36, 'dark');                                   // receiver
+    rod(g, [0, .03, -.15], [0, .03, -.72], .026, 'steel', 10);                  // barrel
+    rod(g, [0, -.035, -.15], [0, -.035, -.62], .022, 'dark', 10);               // magazine tube
+    box(g, 0, -.035, -.36, .1, .085, .2, 'orange');                             // pump
+    box(g, 0, -.06, .3, .11, .17, .28, 'edge');                                 // stock
+    box(g, 0, -.17, .12, .08, .2, .1, 'edge').rotation.x = -.3;                 // grip
+    box(g, 0, .095, -.68, .02, .03, .02, glow);                                 // bead sight
   } else {
     cyl(g, 0, -.07, 0, .06, .075, .17, 'green', 10); box(g, 0, .035, 0, .1, .03, .05, 'edge'); box(g, .07, -.11, .03, .07, .12, .12, 'green');
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
 }
-['rifle', 'pistol', 'grenade'].forEach(gunModel);
+['rifle', 'pistol', 'shotgun', 'grenade'].forEach(gunModel);
 
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdca1, transparent: true, opacity: .9, depthTest: false });
 const muzzle = mesh(gunRig, geo('cone', .075, .23, 5), flashMat, 0, .03, -.79);
@@ -57,6 +65,6 @@ export function updateViewModel(p) {
   }
   if (p.swapLeft > 0) gunRig.position.y -= p.swapLeft * .8;
   muzzle.visible = armed && p.muzzleLeft > 0 && p.weapon !== 'grenade';
-  muzzle.position.z = pistol ? -.22 : -.78; muzzle.rotation.z = Math.random() * 6;
+  muzzle.position.z = pistol ? -.22 : p.weapon === 'shotgun' ? -.74 : -.78; muzzle.rotation.z = Math.random() * 6;
   viewCamera.fov = 70 - p.aimBlend * 7; viewCamera.updateProjectionMatrix();
 }

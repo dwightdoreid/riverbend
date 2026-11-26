@@ -11,7 +11,10 @@ import { isClient, sendShot, sendGrenade } from '../net/net.js';
 export const WEAPONS = {
   rifle: { name: 'AR-30 / ASSAULT RIFLE', short: 'rifle', mode: 'AUTO', cap: 30, reserveMax: 120, interval: .105, reload: 2.15, damage: 31, spread: .009, kick: .011, speed: 240, auto: true, sound: 'shot' },
   pistol: { name: 'P12 / SIDEARM', short: 'pistol', mode: 'SEMI-AUTO', cap: 12, reserveMax: 48, interval: .23, reload: 1.5, damage: 43, spread: .011, kick: .024, speed: 205, auto: false, sound: 'pistol' },
+  // Close-range pump shotgun: 8 pellets per shell, devastating against Skimmers.
+  shotgun: { name: 'SG-8 / SHOTGUN', short: 'shotgun', mode: 'PUMP · 8 PELLETS', cap: 6, reserveMax: 30, interval: .78, reload: 2.6, damage: 15, pellets: 8, pelletSpread: .055, spread: .012, kick: .045, speed: 190, auto: false, sound: 'shotgun' },
 };
+export const DEFAULT_LOADOUT = ['rifle', 'pistol'];
 
 const hud = p => { if (p.local) updateHUD(); };
 
@@ -25,9 +28,12 @@ export function fire(p) {
     tell(p, a.reserve ? 'Empty magazine — R to reload.' : 'Empty — switch weapon or find supplies.', 1.6); return;
   }
   a.mag--; p.stats.shots++; p.fireDelay = w.interval;
-  const origin = eyeOf(p), dir = aimDirection(p, spreadOf(p));
-  if (isClient()) { sendShot(origin, dir, w.speed, w.damage); projectile(origin, dir, w.speed, 0, p, true); }
-  else projectile(origin, dir, w.speed, w.damage, p);
+  const origin = eyeOf(p);
+  for (let i = 0; i < (w.pellets ?? 1); i++) {
+    const dir = aimDirection(p, spreadOf(p) + (w.pelletSpread ?? 0) * (w.pellets ? Math.random() : 0));
+    if (isClient()) { sendShot(origin, dir, w.speed, w.damage); projectile(origin, dir, w.speed, 0, p, true); }
+    else projectile(origin, dir, w.speed, w.damage, p);
+  }
   alertNoise(p.pos, 35);
   p.kick = Math.min(.14, p.kick + w.kick * (p.aiming ? .72 : 1));
   p.yaw += (Math.random() - .5) * w.kick * .3;
@@ -37,6 +43,7 @@ export function fire(p) {
 
 export function switchWeapon(p, next) {
   if (G.status !== 'playing' || p.swapLeft > 0) return;
+  if (next !== 'grenade' && !p.loadout.includes(next)) return;
   if (next === 'grenade' && p.grenades === 0) { tell(p, 'No grenades remaining.'); return; }
   if (p.weapon === next) return;
   if (next !== 'grenade') p.lastGun = next;

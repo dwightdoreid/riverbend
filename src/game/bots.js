@@ -133,6 +133,23 @@ function nearestPlayer(pos) {
   return best;
 }
 
+const flatDist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+
+function harassTarget(e) {
+  const prop = e.def.harass && G.props[e.def.harass];
+  return prop && prop.root.visible ? prop : null;
+}
+
+function shootAt(e, aim, dist) {
+  const T = e.type, m = T.muzzle;
+  const origin = e.pos.clone().add(new THREE.Vector3(m[0], m[1], m[2]).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw));
+  const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
+  aim.x += (Math.random() - .5) * inaccuracy * 2; aim.y += (Math.random() - .5) * inaccuracy;
+  projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null);
+  e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
+  sfxAt(e.pos, T.gun.sound, .1, 100, .2);
+}
+
 /** Distance at which enemy e can see player p right now, or -1 if it can't. */
 function canSee(e, from, p) {
   const to = eyeOf(p), dist = from.distanceTo(to), t = e.type.sight;
@@ -192,13 +209,17 @@ export function updateBots(dt) {
       }
       face();
       if (e.shot <= 0 && G.elapsed > G.protectUntil + .5) {
-        const m = T.muzzle, origin = e.pos.clone().add(new THREE.Vector3(m[0], m[1], m[2]).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw));
         const aim = eye.clone(); aim.y -= t.crouched ? .1 : .28;
-        const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
-        aim.x += (Math.random() - .5) * inaccuracy * 2; aim.y += (Math.random() - .5) * inaccuracy;
-        projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null);
-        e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
-        sfxAt(e.pos, T.gun.sound, .1, 100, .2);
+        shootAt(e, aim, dist);
+      }
+    } else if (harassTarget(e)) {
+      // Escort raiders go for the vehicle when no player is in sight.
+      const prop = harassTarget(e), dist = flatDist(e.pos, prop.pos);
+      if (dist > 13) navigate(e, prop.pos, T.speed.close, dt);
+      else { e.timer += dt; if (e.timer > T.strafeSwap) { e.dodge *= -1; e.timer = 0; } botMove(e, new THREE.Vector3(Math.cos(e.yaw) * e.dodge, 0, -Math.sin(e.yaw) * e.dodge).add(e.pos), T.speed.strafe * .6, dt); }
+      if (dist < 26) {
+        e.yaw = Math.atan2(-(prop.pos.x - e.pos.x), -(prop.pos.z - e.pos.z));
+        if (e.shot <= 0 && G.elapsed > G.protectUntil + .5 && los(from, prop.pos)) shootAt(e, prop.pos.clone(), dist);
       }
     } else if (e.memory > 0) {
       navigate(e, e.lastKnown, T.speed.search, dt);

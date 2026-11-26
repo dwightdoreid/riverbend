@@ -16,6 +16,7 @@ mat('red', 0xb85d48, .1, .6); mat('blue', 0x507f9e, .1, .6); mat('leaf', 0x536e5
 mat('leaf2', 0x6a8157, 0, 1); mat('trunk', 0x6d6051, 0, 1); mat('earth', 0x967254, .35, .7);
 mat('green', 0x47726b, .2, .6); mat('cover', 0x848b7e, .05, .92); mat('crate', 0x4f635d, .4, .65);
 mat('orange', 0xc47b42, .35, .55);
+mat('rock', 0x7d756a, .05, .95); mat('rock2', 0x6a645c, .05, .95); mat('pine', 0x3e5a45, 0, 1); mat('pine2', 0x4b6a4c, 0, 1); mat('asphalt', 0x4a4f51, 0, .97);
 
 export const glowMats = {
   amber: () => new THREE.MeshStandardMaterial({ color: 0xe4b55f, emissive: 0xf4a230, emissiveIntensity: .65, roughness: .45 }),

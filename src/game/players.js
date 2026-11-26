@@ -2,8 +2,8 @@
 // A player is driven by its `input` struct: the local browser fills it from keyboard/touch,
 // and in co-op the host fills remote players' structs from network messages.
 import { THREE } from '../engine/three.js';
-import { moveBlocked } from './world.js';
-import { WEAPONS, fire } from './weapons.js';
+import { moveBlocked, moverBlocked } from './world.js';
+import { WEAPONS, DEFAULT_LOADOUT, fire } from './weapons.js';
 import { alertNoise } from './combat.js';
 import { sfxFor } from './fx.js';
 import { updateHUD } from '../ui/hud.js';
@@ -22,11 +22,12 @@ export function createPlayer({ id, name = 'Operator', local = false }) {
   return p;
 }
 
-export function resetPlayer(p, spawn) {
+export function resetPlayer(p, spawn, loadout) {
   p.pos.set(spawn[0], 0, spawn[1]); p.yaw = spawn[2] ?? 0; p.pitch = 0; p.eye = STAND_EYE; p.bob = 0; p.moving = 0; p.sprinting = false;
   p.health = MAX_HEALTH; p.stamina = 100; p.alive = true;
   p.downed = false; p.bleed = 0; p.respawnAt = 0; p.reviveProgress = 0; p.stims = 1; p.protectUntil = 0;
-  p.weapon = p.lastGun = 'rifle'; p.grenades = MAX_GRENADES;
+  p.loadout = loadout ?? DEFAULT_LOADOUT;
+  p.weapon = p.lastGun = p.loadout[0]; p.grenades = MAX_GRENADES;
   for (const [k, w] of Object.entries(WEAPONS)) p.ammo[k] = { mag: w.cap, reserve: w.reserveMax };
   p.aiming = p.crouched = false; p.aimBlend = 0; p.kick = p.weaponKick = 0; p.muzzleLeft = 0;
   p.reloadLeft = p.reloadTotal = p.fireDelay = p.swapLeft = 0;
@@ -70,8 +71,9 @@ export function updatePlayer(p, dt) {
   if (moving) {
     const len = Math.hypot(forward, side), f = forward / len, s = side / len;
     const dx = (-Math.sin(p.yaw) * f + Math.cos(p.yaw) * s) * speed * dt, dz = (-Math.cos(p.yaw) * f - Math.sin(p.yaw) * s) * speed * dt;
-    if (!moveBlocked(p.pos.x + dx, p.pos.z)) p.pos.x += dx;
-    if (!moveBlocked(p.pos.x, p.pos.z + dz)) p.pos.z += dz;
+    const inside = !!moverBlocked(p.pos.x, p.pos.z);   // a vehicle drove into us: let us walk out
+    if (!moveBlocked(p.pos.x + dx, p.pos.z, .3, inside)) p.pos.x += dx;
+    if (!moveBlocked(p.pos.x, p.pos.z + dz, .3, inside)) p.pos.z += dz;
     p.bob += dt * (p.sprinting ? 12 : 8);
     if (p.sprinting) alertNoise(p.pos, 12);
   }
@@ -100,5 +102,5 @@ export function resupplyPlayer(p) {
   p.grenades = Math.min(MAX_GRENADES, p.grenades + 2);
 }
 export function needsAmmo(p) {
-  return Object.entries(WEAPONS).some(([k, w]) => p.ammo[k].reserve < w.reserveMax) || p.grenades < MAX_GRENADES;
+  return p.loadout.some(k => p.ammo[k].reserve < WEAPONS[k].reserveMax) || p.grenades < MAX_GRENADES;
 }

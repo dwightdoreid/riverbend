@@ -15,6 +15,7 @@ import { addEnemy } from '../game/bots.js';
 import { projectile, burst, explosionFx, alertNoise } from '../game/combat.js';
 import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
+import { poseEscort } from '../game/mission.js';
 import { say, feed, radio, showHit, showDamage } from '../ui/hud.js';
 import { openTransport, randomCode } from './transport.js';
 
@@ -225,6 +226,7 @@ function snapshot() {
     }),
     en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2)]),
     bo: G.bombs.map(b => [r2(b.pos.x), r2(b.pos.y), r2(b.pos.z)]),
+    es: G.escort ? [r2(G.escort.s), Math.ceil(G.escort.hp), G.escort.status] : null,
   };
 }
 
@@ -289,6 +291,7 @@ function applySnapshot(s) {
     if (e.visible) e.seenAt = G.elapsed;
   });
   syncBombVisuals(s.bo);
+  if (s.es && G.escort) { [G.escort.s, G.escort.hp, G.escort.status] = s.es; poseEscort(); }
 }
 
 function applyFx(ev) {

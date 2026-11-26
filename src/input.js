@@ -114,9 +114,7 @@ export function setupInput() {
     const p = me();
     if (k === 'r') reload(p);
     else if (k === 'g') throwGrenade(p);
-    else if (k === '1') switchWeapon(p, 'rifle');
-    else if (k === '2') switchWeapon(p, 'pistol');
-    else if (k === '3') switchWeapon(p, 'grenade');
+    else if (/^[1-9]$/.test(k)) { const slot = [...p.loadout, 'grenade'][+k - 1]; if (slot) switchWeapon(p, slot); }
     else if (k === 'c' || k === 'control') p.crouched = !p.crouched;
     else if (k === 'q') p.aiming = !p.aiming;
     else if (k === 'f') toggleLight();
@@ -135,6 +133,6 @@ export function setupInput() {
   $('lightBtn').onclick = () => { if (playing()) toggleLight(); };
   $('reloadBtn').onclick = () => reload(me());
   $('grenadeBtn').onclick = () => throwGrenade(me());
-  document.querySelectorAll('[data-weapon]').forEach(b => b.onclick = () => switchWeapon(me(), b.dataset.weapon));
+  $('weapons').onclick = e => { const b = e.target.closest('[data-weapon]'); if (b && playing()) switchWeapon(me(), b.dataset.weapon); };
   $('tapResume').onclick = requestMouse;
 }

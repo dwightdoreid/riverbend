@@ -152,7 +152,7 @@ export function updateProjectiles(dt) {
       if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
       else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
       else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner); burst(h, 0xd7c599, 4, 1.3); }
-      else impact(wall.point);
+      else { impact(wall.point); if (wall.mover?.onHit && !p.visual) wall.mover.onHit(p.damage, p.hostile); }
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
     }
     p.pos.add(delta); p.vel.y -= 1.5 * dt; p.mesh.position.copy(p.pos); p.life -= dt;
