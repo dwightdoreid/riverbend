@@ -8,6 +8,7 @@ import { WEAPONS } from '../game/weapons.js';
 import { spreadOf } from '../game/players.js';
 import { objectiveText, objectivePosFor, objectivePositions, currentObjective, inHoldZone } from '../game/mission.js';
 import { sound } from '../engine/audio.js';
+import { fxAll, isClient, inCoop } from '../net/net.js';
 
 const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
 
@@ -15,6 +16,7 @@ const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
 const radioQueue = [];
 let radioLeft = 0;
 export function radio(who, text, time) {
+  fxAll({ t: 'radio', who, text, time });
   radioQueue.push({ who, text, time: time ?? Math.min(9, 1.6 + text.split(' ').length * .33) });
 }
 export function clearRadio() { radioQueue.length = 0; radioLeft = 0; $('radio').classList.remove('on'); }
@@ -28,7 +30,7 @@ function updateRadio(dt) {
 }
 
 export function say(text, time = 3) { $('toast').textContent = text; ui.toastLeft = time; $('toast').style.opacity = 1; }
-export function feed(text) { G.messages.unshift({ text, t: 4 }); if (G.messages.length > 3) G.messages.pop(); }
+export function feed(text) { G.messages.unshift({ text, t: 4 }); if (G.messages.length > 3) G.messages.pop(); fxAll({ t: 'feed', text }); }
 
 export function showHit(kill) {
   ui.hitLeft = .15; $('hitmarker').classList.toggle('kill', kill);
@@ -101,12 +103,39 @@ export function updateUI(dt) {
   healthDisplay(p);
   $('crosshair').style.setProperty('--gap', (5 + spreadOf(p) * 600) + 'px');
   $('crosshair').classList.toggle('aimed', p.aimBlend > .75);
-  $('stance').textContent = p.sprinting ? 'SPRINTING' : p.crouched ? 'CROUCHED' : p.aiming ? 'AIMING' : 'STANDING';
+  $('stance').textContent = p.downed ? 'DOWNED' : !p.alive ? 'OUT' : p.sprinting ? 'SPRINTING' : p.crouched ? 'CROUCHED' : p.aiming ? 'AIMING' : 'STANDING';
   $('sprintFill').style.width = p.stamina + '%';
   updateInteractUI(p);
   setObjectiveText();
   updateRadio(dt);
   $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
+  updateDownedUI(p);
+  if (G.frame % 10 === 0) updateTeam();
+}
+
+function updateDownedUI(p) {
+  const el = $('downed');
+  const timer = isClient() ? p.netTimer ?? 0 : p.downed ? p.bleed : p.respawnAt - G.elapsed;
+  if (p.downed) {
+    const rescue = isClient() ? p.reviveProgress : G.players.find(q => q.interaction?.type === 'revive' && q.interaction.obj === p)?.interactTime / 3;
+    el.innerHTML = '<b>DOWNED</b> · bleeding out in ' + Math.ceil(timer) + 's<span>' + (rescue > 0 ? 'Being revived… ' + Math.round(rescue * 100) + '%' : 'A teammate can revive you: hold E next to you') + '</span>';
+    el.classList.add('on');
+  } else if (!p.alive && inCoop()) {
+    el.innerHTML = '<b>OUT</b> · back in ' + Math.max(0, Math.ceil(timer)) + 's<span>You\'ll rejoin next to a teammate</span>';
+    el.classList.add('on');
+  } else el.classList.remove('on');
+}
+
+function updateTeam() {
+  const el = $('team');
+  const mates = inCoop() ? G.players.filter(q => !q.local).length : 0;
+  $('feed').style.top = mates ? (118 + mates * 31 + 8) + 'px' : '';
+  if (!mates) { el.innerHTML = ''; return; }
+  el.innerHTML = G.players.filter(q => !q.local).map(q => {
+    const state = q.downed ? 'DOWN' : !q.alive ? 'OUT' : Math.ceil(q.health);
+    const pct = q.alive && !q.downed ? Math.min(100, q.health) : 0;
+    return '<div class="mate' + (q.downed ? ' down' : '') + '"><span>' + q.name.replace(/[<&]/g, '') + '</span><i style="width:' + pct + '%"></i><b>' + state + '</b></div>';
+  }).join('');
 }
 
 const mc = $('map').getContext('2d'), MW = 296, MH = 272;

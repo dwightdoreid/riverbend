@@ -4,7 +4,8 @@ import { THREE } from '../engine/three.js';
 import { box, cyl, rod } from '../engine/builders.js';
 import { G } from './state.js';
 import { moveBlocked, los, freePoint } from './world.js';
-import { eyeOf } from './players.js';
+import { eyeOf, isActive } from './players.js';
+import { isHost, isClient, fxAll } from '../net/net.js';
 import { projectile } from './combat.js';
 import { litAt } from './props.js';
 import { walkable, findPath } from './nav.js';
@@ -75,15 +76,20 @@ export function addEnemy(def, alertAt = null) {
   const home = freePoint(...def.at), patrol = freePoint(...(def.patrol ?? def.at));
   const e = {
     id: i, def, type: T, g, mat: bodyMat, rotors, cone, pos: home.clone(), home, patrol, dest: patrol.clone(),
-    hp: T.hp, yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,
+    hp: T.hp * hpScale(), yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,
     shot: 1 + i * .17, sense: i * .027, visible: false, seenAt: -99, flash: 0, dead: false, dodge: i % 2 ? 1 : -1, target: null,
   };
   // Wave enemies (spawned with an alert point) hunt: they always know roughly where players are.
   if (alertAt) { e.state = 'investigate'; e.memory = 12; e.lastKnown.copy(alertAt); e.hunt = true; }
   g.position.copy(e.pos);
+  // Mid-mission spawns (waves) are announced to co-op clients so their enemy lists stay in step.
+  if (isHost() && G.status === 'playing') fxAll({ t: 'enemy', def, alert: alertAt ? [alertAt.x, alertAt.z] : null });
   G.enemies.push(e);
   return e;
 }
+
+/** Co-op scaling: machines get tougher with more players (counts scale in wave events). */
+const hpScale = () => isClient() ? 1 : 1 + .4 * (G.players.length - 1);
 
 export function spawnEnemies(defs) {
   G.enemies.length = 0;
@@ -123,7 +129,7 @@ function navigate(e, target, speed, dt) {
 
 function nearestPlayer(pos) {
   let best = null, bestD = Infinity;
-  for (const p of G.players) if (p.alive) { const d = p.pos.distanceTo(pos); if (d < bestD) { best = p; bestD = d; } }
+  for (const p of G.players) if (isActive(p)) { const d = p.pos.distanceTo(pos); if (d < bestD) { best = p; bestD = d; } }
   return best;
 }
 
@@ -145,9 +151,9 @@ export function updateBots(dt) {
   for (const e of G.enemies) {
     if (e.dead) continue;
     const T = e.type;
-    e.shot -= dt; e.memory = Math.max(0, e.memory - dt); e.flash = Math.max(0, e.flash - dt);
+    e.shot -= dt; e.memory = Math.max(0, e.memory - dt);
     e.mat.emissive.setHex(e.flash > 0 ? 0x9c532c : 0x000000);
-    if (e.target && !e.target.alive) { e.target = null; e.visible = false; }
+    if (e.target && !isActive(e.target)) { e.target = null; e.visible = false; }
     const from = e.pos.clone().add(new THREE.Vector3(0, T.eyeY, 0));
 
     e.sense -= dt;
@@ -156,7 +162,7 @@ export function updateBots(dt) {
       // Keep the current target while it stays visible; otherwise pick the nearest visible player.
       let best = null, bestD = Infinity;
       for (const p of G.players) {
-        if (!p.alive) continue;
+        if (!isActive(p)) continue;
         const d = canSee(e, from, p);
         const score = p === e.target ? -1 : d;
         if (d >= 0 && score < bestD) { best = p; bestD = score; }
@@ -202,10 +208,16 @@ export function updateBots(dt) {
       if (e.pos.distanceTo(e.dest) < .9) e.dest.copy(e.dest.distanceTo(e.home) < 1 ? e.patrol : e.home);
       navigate(e, e.dest, T.speed.patrol, dt);
     }
-    e.g.position.copy(e.pos); e.g.position.y = Math.sin(G.elapsed * 2.7 + e.id) * T.bob; e.g.rotation.y = e.yaw;
-    for (const r of e.rotors) r.rotation.y += dt * 38;
-    if (e.cone) e.cone.material.color.setHex(CONE_COLORS[e.state] ?? CONE_COLORS.patrol);
+    poseEnemy(e, dt);
   }
+}
+
+/** Moves the model to the enemy's state: hover bob, rotors, sensor cone colour. */
+export function poseEnemy(e, dt) {
+  e.flash = Math.max(0, e.flash - dt);
+  e.g.position.copy(e.pos); e.g.position.y = Math.sin(G.elapsed * 2.7 + e.id) * e.type.bob; e.g.rotation.y = e.yaw;
+  for (const r of e.rotors) r.rotation.y += dt * 38;
+  if (e.cone) e.cone.material.color.setHex(CONE_COLORS[e.state] ?? CONE_COLORS.patrol);
 }
 
 /** Serializable enemy state for checkpoints (and later, network sync). */

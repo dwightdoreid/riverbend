@@ -41,7 +41,8 @@ export function updateCamera(p) {
 }
 
 export function updateViewModel(p) {
-  for (const [k, g] of Object.entries(gunModels)) g.visible = k === p.weapon;
+  const armed = p.alive && !p.downed;
+  for (const [k, g] of Object.entries(gunModels)) g.visible = armed && k === p.weapon;
   const portrait = innerHeight > innerWidth, scale = portrait ? .8 : 1, pistol = p.weapon === 'pistol';
   gunRig.scale.setScalar(scale);
   const x = THREE.MathUtils.lerp((pistol ? .24 : .29) * (portrait ? .62 : 1), 0, p.aimBlend);
@@ -55,7 +56,7 @@ export function updateViewModel(p) {
     gunRig.position.y -= Math.sin(t * Math.PI) * .19; gunRig.rotation.z = -Math.sin(t * Math.PI) * .5; gunRig.rotation.x -= Math.sin(t * Math.PI) * .25;
   }
   if (p.swapLeft > 0) gunRig.position.y -= p.swapLeft * .8;
-  muzzle.visible = p.muzzleLeft > 0 && p.weapon !== 'grenade';
+  muzzle.visible = armed && p.muzzleLeft > 0 && p.weapon !== 'grenade';
   muzzle.position.z = pistol ? -.22 : -.78; muzzle.rotation.z = Math.random() * 6;
   viewCamera.fov = 70 - p.aimBlend * 7; viewCamera.updateProjectionMatrix();
 }

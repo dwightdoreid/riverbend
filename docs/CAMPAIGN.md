@@ -126,12 +126,13 @@ There are 13 environments, and some are reused with different lighting or layout
    - triggers, timed waves and radio dialogue
    - night and storm lighting, the flashlight and sensor cones
    - the Skimmer
-3. **Phase 2, co-op:**
+3. **Done: Phase 2, co-op:**
    - WebRTC rooms and lobby
-   - remote player avatars
-   - syncing game state from the host
-   - smoothing remote players' movement
-   - downed state and revive
+   - teammate avatars with name tags
+   - host-authoritative game sync with client-side movement
+   - downed state, revive and respawn
    - enemy scaling
+   - dropping in at checkpoints
+   - a team health panel
 4. **Phase 3, content in batches:** Act I (03–05), then Act II, III and IV. Each new mission brings one new mechanic.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

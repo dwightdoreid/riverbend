@@ -17,7 +17,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 37 scripted checks in headless Chrome
+python3 tools/smoke_test.py                  # 40 scripted solo checks in headless Chrome
+python3 tools/coop_test.py                   # 32 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
 
@@ -34,7 +35,7 @@ It also fails if any runtime error appears. A final check holds the right mouse 
 ```
 index.html            page shell and HUD markup
 css/style.css
-vendor/               three.min.js and its license
+vendor/               three.min.js, peerjs.min.js and their licenses
 src/
   main.js             boot and frame loop: step() runs the simulation for every player
   input.js            keyboard, mouse and touch, written into G.local.input
@@ -52,10 +53,14 @@ src/
     progress.js       unlocked missions and best times (saved in the browser)
     fx.js             routes sounds and toasts to the player they concern
     viewmodel.js      first-person camera and held weapon
-  ui/hud.js, menu.js  HUD, minimap, objective marker, menus
+    nav.js            walkability grid + A* pathfinding for machines
+    avatars.js        teammates' bodies and name tags
+  net/net.js          co-op session: lobby, snapshots, events, host/client roles
+  net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
+  ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
   levels/             level geometry (riverbend.js) and reusable pieces (kit.js)
   missions/           mission definitions plus the campaign order (index.js)
-tools/                smoke test
+tools/                smoke_test.py (solo), coop_test.py (two-browser co-op)
 substation_fps.html   the original single-file version, kept for reference
 ```
 
@@ -85,12 +90,28 @@ Each objective can have `onStart` and `onComplete` events.
 
 **Trigger conditions** (`when`): `time`, `enter: [x, z, r]`, `near: [prop, r]`, `hold: seconds`, `collected: n` and `enemiesLeft: n`.
 
-## Co-op readiness
+## Co-op (1–4 players)
 
-The simulation no longer assumes a single player:
+1. One player opens **Co-op → Host a game** and shares the 5-letter room code.
+2. Friends open the game, choose **Co-op**, type the code and press **Join game**.
+3. The host picks a mission and presses **Deploy squad**. Everyone loads in together.
 
-- Every player has its own position, health, ammo, timers and stats in `G.players`.
-- Players are moved by an `input` struct, so a remote player can be driven by network messages.
-- Enemies choose the nearest visible living player as their target.
-- Bullets and explosions can hit any player. The mission fails only when every player is down.
-- Sounds and toasts go only to the player they concern (`fx.js`).
+**How it works**
+- **Connection:** browsers connect directly with WebRTC. The public PeerJS server (`vendor/peerjs.min.js`) is only used to introduce them.
+- **Host-authoritative:** the host's browser runs the enemies, damage, objectives and mission script. It sends a snapshot 20 times a second, plus reliable one-off events such as radio, waves, hit markers and explosions.
+- **Clients run their own player:** each player's browser moves its own player and handles its weapon locally, so it feels instant. Shots and grenades are sent to the host, which decides what they hit.
+- **Downed and revive:** a player whose health hits zero goes down and has 30 s for a teammate to revive them (hold E). If they bleed out, they're back in after 20 s next to a teammate. The mission fails only when nobody is left standing. Solo players get one auto-stim per checkpoint instead.
+- **Scaling:** enemy health rises 40% per extra player, and wave size rises 50%.
+- **Joining late:** players who join mid-mission drop in at the next checkpoint.
+- **Pause:** the menu opens over the running game and doesn't pause it.
+
+**Known limits**
+- The host's tab must stay open and in front, because browsers slow background tabs.
+- Some strict networks (symmetric NAT, some corporate or mobile networks) block direct WebRTC connections. Fixing that needs a TURN relay server, which isn't set up.
+- Clients are trusted with their own position and ammo. That's fine for friends, but it isn't cheat-proof.
+
+**Testing co-op on one machine:** open two tabs with `index.html?net=local`. They connect through the browser itself, with no internet needed. `python3 tools/coop_test.py` does this automatically and runs 32 checks covering:
+- lobby, deploy, and position sync both ways
+- client shots, damage, downed and revive
+- objectives, waves and grenades
+- mission end, next mission, leaving, and dropping in at a checkpoint

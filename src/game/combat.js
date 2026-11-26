@@ -2,22 +2,27 @@
 import { THREE } from '../engine/three.js';
 import { geo } from '../engine/builders.js';
 import { G } from './state.js';
-import { world, castSolid, los, testRay } from './world.js';
-import { eyeOf } from './players.js';
+import { world, castSolid, los, testRay, freePoint } from './world.js';
+import { eyeOf, isActive } from './players.js';
 import { sound } from '../engine/audio.js';
-import { sfxFor, sfxAt } from './fx.js';
+import { sfxFor, sfxAt, tell } from './fx.js';
 import { feed, showHit, showDamage } from '../ui/hud.js';
+import { isHost, fxAll, fxTo } from '../net/net.js';
 import { finish } from './flow.js';
 
 const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
 
-/** owner: the player who fired, or null for hostile (enemy) fire. */
-export function projectile(origin, dir, speed, damage, owner = null) {
+const r2 = v => Math.round(v * 100) / 100;
+
+/** owner: the player who fired, or null for hostile (enemy) fire.
+ *  visual: a client-side copy that only draws (the host decides what real shots hit). */
+export function projectile(origin, dir, speed, damage, owner = null, visual = false) {
   const hostile = !owner;
+  if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1 }, owner && !owner.local ? owner.id : null);
   const m = new THREE.Mesh(geo('sphere', .035, 5, 4), hostile ? hostileMat : bulletMat);
   m.position.copy(origin); G.dynRoot.add(m);
-  G.projectiles.push({ pos: origin.clone(), vel: dir.multiplyScalar(speed), damage, hostile, owner, life: 1.6, mesh: m });
+  G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, life: 1.6, mesh: m });
 }
 
 export function alertNoise(pos, r) {
@@ -31,24 +36,71 @@ export function damageEnemy(e, amount, head = false, attacker = null) {
   if (e.dead) return;
   e.hp -= amount; e.flash = .13; e.state = 'engage'; e.memory = 7; e.shot = Math.max(e.shot, .4);
   if (attacker) { e.lastKnown.copy(attacker.pos); e.target = attacker; }
-  if (attacker?.local) { showHit(false); sound('hit', .6); }
-  if (e.hp <= 0) {
+  const kill = e.hp <= 0;
+  if (attacker?.local) { showHit(kill); sound('hit', .6); }
+  else if (attacker) fxTo(attacker.id, { t: 'hit', kill });
+  if (kill) {
     e.dead = true; e.g.visible = false;
     if (attacker) attacker.stats.kills++;
-    burst(e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), 0xc3be9e, 14, 3);
-    if (attacker?.local) showHit(true);
+    const at = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0));
+    burst(at, 0xc3be9e, 14, 3); fxAll({ t: 'burst', p: at.toArray().map(r2), c: 0xc3be9e, n: 14, pw: 3 });
     feed(e.type.name + ' disabled' + (head ? ' · sensor hit' : ''));
   } else if (head) feed('Sensor hit');
 }
 
+export const BLEED_OUT = 30, RESPAWN_DELAY = 20, REVIVE_HEALTH = 40;
+
 export function hurt(p, amount, source) {
-  if (G.status !== 'playing' || !p.alive || G.elapsed < G.protectUntil) return;
+  if (G.status !== 'playing' || !isActive(p) || G.elapsed < G.protectUntil || G.elapsed < p.protectUntil) return;
   p.health = Math.max(0, p.health - amount); p.stats.damage += amount;
   sfxFor(p, 'hurt');
   if (p.local) showDamage(p, source);
-  if (p.health <= 0) {
-    p.alive = false;
-    if (!G.players.some(q => q.alive)) finish(false);
+  else fxTo(p.id, { t: 'dmg', src: source ? [r2(source.x), r2(source.z)] : null });
+  if (p.health > 0) return;
+  if (G.players.length === 1) {
+    // Solo: one automatic stim per checkpoint, then the mission fails.
+    if (p.stims > 0) {
+      p.stims--; p.health = 50; p.protectUntil = G.elapsed + 1.5;
+      feed('Auto-stim injected'); tell(p, 'Stim used. Get to cover!', 3);
+      return;
+    }
+    p.alive = false; finish(false); return;
+  }
+  // Co-op: go down; a teammate can revive you before you bleed out.
+  p.downed = true; p.bleed = BLEED_OUT; p.health = 0;
+  feed(p.name + ' is down');
+  checkTeamWipe();
+}
+
+function checkTeamWipe() {
+  if (!G.players.some(isActive)) finish(false);
+}
+
+export function revive(p, by) {
+  p.downed = false; p.health = REVIVE_HEALTH; p.protectUntil = G.elapsed + 1.5;
+  feed(by.name + ' revived ' + p.name);
+  sfxFor(p, 'objective'); sfxFor(by, 'objective');
+}
+
+/** Host: bleed-out timers and respawns for co-op. */
+export function updateDowned(dt) {
+  for (const p of G.players) {
+    if (p.downed) {
+      p.bleed -= dt;
+      if (p.bleed <= 0) {
+        p.downed = false; p.alive = false; p.respawnAt = G.elapsed + RESPAWN_DELAY;
+        feed(p.name + ' bled out · back in ' + RESPAWN_DELAY + 's');
+        checkTeamWipe();
+        if (G.status !== 'playing') return;
+      }
+    } else if (!p.alive && G.players.length > 1 && G.elapsed >= p.respawnAt) {
+      const mate = G.players.find(isActive);
+      if (!mate) continue;
+      const spot = freePoint(mate.pos.x + 1.2, mate.pos.z + 1.2);
+      p.alive = true; p.health = 100; p.protectUntil = G.elapsed + 2.5; p.pos.copy(spot);
+      if (p.local) p.eye = 1.72; else fxTo(p.id, { t: 'tp', x: spot.x, z: spot.z });
+      feed(p.name + ' is back in');
+    }
   }
 }
 
@@ -89,7 +141,7 @@ export function updateProjectiles(dt) {
       }
     } else {
       for (const pl of G.players) {
-        if (!pl.alive) continue;
+        if (!isActive(pl)) continue;
         sphere.set(tmp.set(pl.pos.x, pl.eye * .66, pl.pos.z), pl.crouched ? .53 : .67);
         const hit = testRay.intersectSphere(sphere, new THREE.Vector3());
         if (hit) { const d = hit.distanceTo(p.pos); if (d < nearest && d <= distance) { nearest = d; victim = pl; } }
@@ -97,7 +149,8 @@ export function updateProjectiles(dt) {
     }
     if (victim || wall) {
       const h = p.pos.clone().addScaledVector(dir, nearest);
-      if (p.hostile && victim) hurt(victim, p.damage, p.pos);
+      if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
+      else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
       else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner); burst(h, 0xd7c599, 4, 1.3); }
       else impact(wall.point);
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
@@ -133,24 +186,29 @@ export function updateBombs(dt) {
   }
 }
 
-function explode(b) {
-  const p = b.pos.clone(), radius = 8, lift = p.clone().add(new THREE.Vector3(0, .18, 0));
+/** The visible and audible part of an explosion (also used by co-op clients). */
+export function explosionFx(p) {
   burst(p, 0xffc076, 36, 8);
   const light = new THREE.PointLight(0xffb75a, 10, 15, 2); light.position.copy(p); G.dynRoot.add(light); G.effects.push({ light, life: .14, total: .14 });
   const ring = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb95a, transparent: true, opacity: .3, wireframe: true }));
   ring.position.copy(p); G.dynRoot.add(ring); G.effects.push({ ring, life: .32, total: .32 });
+  sfxAt(p, 'blast', 1, 85, .15);
+}
+
+function explode(b) {
+  const p = b.pos.clone(), radius = 8, lift = p.clone().add(new THREE.Vector3(0, .18, 0));
+  explosionFx(p); fxAll({ t: 'boom', p: p.toArray().map(r2) });
   for (const e of G.enemies) {
     if (e.dead) continue;
     const target = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), d = target.distanceTo(p);
     if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner);
   }
   for (const pl of G.players) {
-    if (!pl.alive) continue;
+    if (!isActive(pl)) continue;
     const eye = eyeOf(pl), d = eye.distanceTo(p);
     if (d < radius && los(lift, eye)) hurt(pl, 115 * (1 - d / radius), p);
   }
   alertNoise(p, 55);
-  sfxAt(p, 'blast', 1, 85, .15);
   b.g.removeFromParent();
 }
 

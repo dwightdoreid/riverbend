@@ -25,6 +25,7 @@ export function createPlayer({ id, name = 'Operator', local = false }) {
 export function resetPlayer(p, spawn) {
   p.pos.set(spawn[0], 0, spawn[1]); p.yaw = spawn[2] ?? 0; p.pitch = 0; p.eye = STAND_EYE; p.bob = 0; p.moving = 0; p.sprinting = false;
   p.health = MAX_HEALTH; p.stamina = 100; p.alive = true;
+  p.downed = false; p.bleed = 0; p.respawnAt = 0; p.reviveProgress = 0; p.stims = 1; p.protectUntil = 0;
   p.weapon = p.lastGun = 'rifle'; p.grenades = MAX_GRENADES;
   for (const [k, w] of Object.entries(WEAPONS)) p.ammo[k] = { mag: w.cap, reserve: w.reserveMax };
   p.aiming = p.crouched = false; p.aimBlend = 0; p.kick = p.weaponKick = 0; p.muzzleLeft = 0;
@@ -35,6 +36,8 @@ export function resetPlayer(p, spawn) {
 }
 
 export const eyeOf = p => new THREE.Vector3(p.pos.x, p.eye, p.pos.z);
+/** Alive and not downed: can move, shoot, be targeted, revive others. */
+export const isActive = p => p.alive && !p.downed;
 
 export function aimDirection(p, spread = 0) {
   const d = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(p.pitch + p.kick, p.yaw, 0, 'YXZ'));
@@ -52,8 +55,14 @@ export function spreadOf(p) {
   return w.spread * (1 + (p.moving ? 1.2 : 0) + (p.sprinting ? 3 : 0)) * (1 - p.aimBlend * .72) * (p.crouched ? .65 : 1) + p.weaponKick * .04;
 }
 
+export const DOWNED_EYE = .45;
+
 export function updatePlayer(p, dt) {
-  if (!p.alive) return;
+  if (!p.alive || p.downed) {
+    p.moving = 0; p.sprinting = false; p.aiming = false; p.input.trigger = p.input.semi = false; p.reloadLeft = 0;
+    p.eye = THREE.MathUtils.damp(p.eye, DOWNED_EYE, 6, dt); p.aimBlend = THREE.MathUtils.damp(p.aimBlend, 0, 14, dt);
+    return;
+  }
   const { forward, side } = p.input, moving = forward !== 0 || side !== 0;
   p.sprinting = moving && forward > 0 && p.input.sprint && !p.crouched && !p.aiming && p.stamina > 2 && p.reloadLeft <= 0;
   p.moving = moving ? 1 : 0;

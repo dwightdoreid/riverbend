@@ -13,7 +13,7 @@ const keys = new Set();
 export const settings = { sensitivity: 1 };
 let dragId = null, dragLast = null, rightDrag = false, hadLock = false, rmbAim = false, lastTouch = -1e9;
 
-const playing = () => G.status === 'playing';
+const playing = () => G.status === 'playing' && !G.overlay;
 const me = () => G.local;
 
 export function sampleInput() {

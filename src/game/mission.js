@@ -10,8 +10,9 @@ import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
 import { spawnProps, spawnPickups } from './props.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
-import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, MAX_HEALTH } from './players.js';
-import { alertNoise, clearCombat } from './combat.js';
+import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
+import { alertNoise, clearCombat, revive } from './combat.js';
+import { fxAll, fxTo, onCheckpoint } from '../net/net.js';
 import { sfxFor, tell } from './fx.js';
 import { say, feed, radio, clearRadio, updateHUD } from '../ui/hud.js';
 import { finish } from './flow.js';
@@ -145,7 +146,7 @@ function collectTarget(p, id) {
 /** Per-step progress for objectives that aren't hold-to-interact. */
 export function updateObjective(dt) {
   const o = currentObjective(); if (!o) return;
-  const alive = G.players.filter(p => p.alive);
+  const alive = G.players.filter(isActive);
   if (o.type === 'reach') {
     const p = alive.find(q => flat(q.pos, posOf(o.target)) < (o.radius ?? 3));
     if (p) completeObjective(p);
@@ -164,7 +165,7 @@ export function updateObjective(dt) {
 
 /** Mission script verbs. Missions use these as { do: 'verb', ...args }. */
 const EVENTS = {
-  say: ev => say(ev.text, ev.time ?? 3),
+  say: ev => { say(ev.text, ev.time ?? 3); fxAll({ t: 'say', text: ev.text, time: ev.time ?? 3 }); },
   feed: ev => feed(ev.text),
   radio: ev => radio(ev.who, ev.text, ev.time),
   noise: ev => alertNoise(posOf(ev.at), ev.radius),
@@ -174,7 +175,13 @@ const EVENTS = {
   propStyle: ev => G.props[ev.prop].setStyle(ev.style),
   spawn: ev => {
     const alertAt = ev.alert ? posOf(ev.alert) : null;
-    for (const def of ev.enemies) addEnemy(def, alertAt);
+    // Co-op: +50% wave size per extra player (copies offset slightly so they don't stack).
+    const extra = Math.floor(ev.enemies.length * (G.players.length - 1) * .5);
+    const defs = [...ev.enemies, ...Array.from({ length: extra }, (_, i) => {
+      const d = ev.enemies[i % ev.enemies.length];
+      return { ...d, at: [d.at[0] + 1.5 + i * .5, d.at[1] + 1] };
+    })];
+    for (const def of defs) addEnemy(def, alertAt);
     if (ev.feed) feed(ev.feed);
   },
   checkpoint: ev => takeCheckpoint(ev.name),
@@ -209,8 +216,8 @@ export function updateScripts(dt) {
 /** Trigger conditions. A trigger may also have `objective: n` to only arm during objective n. */
 const CONDITIONS = {
   time: t => G.elapsed >= t,
-  enter: ([x, z, r]) => G.players.some(p => p.alive && Math.hypot(p.pos.x - x, p.pos.z - z) < r),
-  near: ([prop, r]) => G.players.some(p => p.alive && flat(p.pos, posOf(prop)) < r),
+  enter: ([x, z, r]) => G.players.some(p => isActive(p) && Math.hypot(p.pos.x - x, p.pos.z - z) < r),
+  near: ([prop, r]) => G.players.some(p => isActive(p) && flat(p.pos, posOf(prop)) < r),
   hold: t => currentObjective()?.type === 'hold' && G.objState.hold >= t,
   collected: n => G.objState.collected.size >= n,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
@@ -242,8 +249,10 @@ function takeCheckpoint(name = 'Checkpoint') {
       grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight,
     })),
   };
+  for (const p of G.players) p.stims = 1;
   feed('Checkpoint · ' + name);
   sound('objective', .5);
+  onCheckpoint();   // co-op: players waiting to drop in join now
 }
 
 function applyCheckpoint(c) {
@@ -265,6 +274,10 @@ function applyCheckpoint(c) {
 // ---------------------------------------------------------------- interaction
 
 function interactionCandidate(p) {
+  // Reviving a downed teammate takes priority over everything else.
+  for (const q of G.players) {
+    if (q !== p && q.downed && flat(q.pos, p.pos) < 2.2) return { type: 'revive', obj: q, name: 'Revive ' + q.name, time: 3 };
+  }
   const o = currentObjective(), kind = o?.type ?? 'interact';
   if (o && (kind === 'interact' || kind === 'collect')) {
     for (const id of objectiveTargets(o)) {
@@ -274,14 +287,14 @@ function interactionCandidate(p) {
   for (const k of G.pickups) {
     if (k.used || flat(k.pos, p.pos) >= 2.1) continue;
     if (k.type === 'med' && p.health >= MAX_HEALTH) continue;
-    if (k.type === 'ammo' && !needsAmmo(p)) continue;
+    if (k.type === 'ammo' && !(p.local ? needsAmmo(p) : p.netNeedAmmo)) continue;
     return { type: 'pickup', obj: k, name: k.type === 'med' ? 'Use medical kit (+45 health)' : 'Resupply magazines and grenades', time: .9 };
   }
   return null;
 }
 
 export function updateInteract(p, dt) {
-  const c = p.alive ? interactionCandidate(p) : null;
+  const c = isActive(p) ? interactionCandidate(p) : null;
   if (!c) { p.interaction = null; p.interactTime = 0; return; }
   if (!p.interaction || p.interaction.obj !== c.obj) p.interactTime = 0;
   p.interaction = c;
@@ -289,13 +302,14 @@ export function updateInteract(p, dt) {
   p.interactTime += dt;
   if (p.interactTime < c.time) return;
   p.interactTime = 0;
+  if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
   if (c.type === 'objective') {
     if (currentObjective().type === 'collect') collectTarget(p, c.obj); else completeObjective(p);
     return;
   }
   const k = c.obj; k.used = true; k.g.visible = false;
   if (k.type === 'med') { healPlayer(p, 45); tell(p, 'Medical kit used.'); }
-  else { resupplyPlayer(p); tell(p, 'Reserve ammunition replenished.'); }
+  else { if (p.local) resupplyPlayer(p); else fxTo(p.id, { t: 'resupply' }); tell(p, 'Reserve ammunition replenished.'); }
   sfxFor(p, 'objective');
   if (p.local) updateHUD();
 }
@@ -303,5 +317,5 @@ export function updateInteract(p, dt) {
 /** Is player p standing in the current hold zone? (for the HUD) */
 export function inHoldZone(p) {
   const o = currentObjective();
-  return o?.type === 'hold' && p.alive && flat(p.pos, posOf(o.target)) < (o.radius ?? 6);
+  return o?.type === 'hold' && isActive(p) && flat(p.pos, posOf(o.target)) < (o.radius ?? 6);
 }

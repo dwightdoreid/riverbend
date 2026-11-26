@@ -63,6 +63,8 @@ async function mission01() {
   // Die after the checkpoint, then retry from it.
   const deadBefore = S().enemies.filter(e => e.dead).length;
   G.local.health = 100; hurt(G.local, 500, G.local.pos.clone()); await frames(2);
+  check('solo: first lethal hit uses the auto-stim', S().status === 'playing' && G.local.health === 50 && G.local.stims === 0, 'health=' + G.local.health);
+  G.local.protectUntil = 0; hurt(G.local, 500, G.local.pos.clone()); await frames(2);
   check('death -> mission failed', S().status === 'lost', S().status);
   await click('retryBtn');
   check('retry resumes at checkpoint', S().status === 'playing' && S().objective === 2 && S().enemies.filter(e => e.dead).length === deadBefore, 'objective=' + S().objective);
@@ -80,7 +82,7 @@ async function mission01() {
   await click('replayBtn');
   check('replay resets', S().status === 'playing' && S().objective === 0 && S().mag === 30 && S().grenades === 3 && !G.checkpoint, JSON.stringify({ o: S().objective, m: S().mag }));
   G.elapsed = Math.max(G.elapsed, 3);
-  hurt(G.local, 500, G.local.pos.clone()); await frames(2);
+  hurt(G.local, 500, G.local.pos.clone()); G.local.protectUntil = 0; hurt(G.local, 500, G.local.pos.clone()); await frames(2);
   check('death without checkpoint offers restart', S().status === 'lost' && !document.getElementById('retryBtn') && !!document.getElementById('restartBtn'));
 }
 

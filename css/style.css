@@ -19,3 +19,28 @@
 .mission-card.locked{opacity:.45;cursor:not-allowed}
 .mission-card.current{border-color:var(--amber)}
 @media(max-width:700px){#radio{left:12px;right:12px;bottom:190px;max-width:none;font-size:11px}.mission-list{grid-template-columns:1fr}}
+
+/* Phase 2: co-op HUD and lobby */
+#team{position:absolute;left:22px;top:118px;display:flex;flex-direction:column;gap:5px;width:200px}
+#team:empty{display:none}
+.mate{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 9px 7px;font-size:11px;display:flex;justify-content:space-between}
+.mate i{position:absolute;left:0;bottom:0;height:2px;background:#b7d7bf;border-radius:0 0 0 6px}
+.mate b{font-weight:600;color:#b7d7bf}
+.mate.down{border-color:#f48c7280}.mate.down b{color:var(--red)}
+#downed{position:absolute;left:50%;top:30%;transform:translateX(-50%);text-align:center;background:#2a1412d9;border:1px solid #f48c7270;border-radius:9px;padding:12px 20px;font-size:13px;display:none}
+#downed.on{display:block}
+#downed b{color:var(--red);letter-spacing:2px}
+#downed span{display:block;font-size:11px;color:#e6c9c1;margin-top:4px}
+.coop{margin:18px 0;max-width:520px;border:1px solid #ffffff20;border-radius:9px;background:#0c1f2670;padding:14px 16px;font-size:12px}
+.coop label{display:flex;gap:9px;align-items:center;color:var(--muted)}
+.coop input{background:#1e3540;border:1px solid var(--line);border-radius:6px;padding:8px 10px;color:#eaf1eb;font:inherit}
+.coop .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.coop #joinCode{width:120px;text-transform:uppercase;letter-spacing:3px}
+.coop .room{font-size:11px;color:var(--muted);letter-spacing:1.5px;margin-top:4px}
+.coop .room b{display:block;font-size:30px;color:var(--amber);letter-spacing:6px;font-weight:600}
+.coop ul{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:4px}
+.coop li{display:flex;justify-content:space-between;border-bottom:1px solid #ffffff10;padding:4px 0}
+.coop li small{color:var(--muted)}
+.coop .status{color:#b8cac7;margin:10px 0 0;min-height:1em}
+.coop .fine{font-size:10px;color:#91aaa9;margin:10px 0 0}
+@media(max-width:700px){#team{left:12px;top:100px;width:160px}}

@@ -84,7 +84,7 @@ class CDP:
 def launch(url):
     profile = tempfile.mkdtemp(prefix='rb-chrome-')
     proc = subprocess.Popen([CHROME, '--headless=new', '--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader',
-                             '--mute-audio', '--window-size=' + os.environ.get('RB_WINDOW', '800,450'), '--remote-debugging-port=0', '--user-data-dir=' + profile,
+                             '--mute-audio', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--window-size=' + os.environ.get('RB_WINDOW', '800,450'), '--remote-debugging-port=0', '--user-data-dir=' + profile,
                              '--no-first-run', '--no-default-browser-check', url],
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     port_file = os.path.join(profile, 'DevToolsActivePort')
@@ -98,7 +98,9 @@ def launch(url):
         if pages:
             break
         time.sleep(.1)
-    return proc, profile, CDP(pages[0]['webSocketDebuggerUrl'])
+    cdp = CDP(pages[0]['webSocketDebuggerUrl'])
+    cdp.port = port
+    return proc, profile, cdp
 
 
 def chord_fire_check(cdp):
