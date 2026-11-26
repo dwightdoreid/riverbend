@@ -5,7 +5,8 @@ import { THREE } from '../src/engine/three.js';
 import { G } from '../src/game/state.js';
 import { hurt, projectile, damageEnemy } from '../src/game/combat.js';
 import { litAt, damageProp } from '../src/game/props.js';
-import { canvas, flashlight } from '../src/engine/render.js';
+import { canvas, flashlight, camera } from '../src/engine/render.js';
+import { updateBlackout, districtLit } from '../src/game/blackout.js';
 
 const log = [], errors = [];
 window.autotestLog = log;
@@ -312,6 +313,51 @@ async function mission05() {
   check('Warden destroyed -> Act I complete', S().status === 'won' && /Halvard/.test(document.getElementById('menuText').textContent), S().status);
 }
 
+async function mission06() {
+  await click('nextBtn');
+  check('next mission -> 06 briefing (Act II)', S().status === 'briefing' && S().mission === 'm06', S().mission);
+  check('Port Calder level with three districts', G.level.id === 'portcalder' && G.level.districts.length === 3 && G.env.dark);
+  await click('startBtn'); godMode();
+
+  // DMR: zooms much further than the rifle when aiming.
+  await tap('2'); await waitSim(.4);
+  await tap('q'); await waitSim(.6);
+  check('DMR-14 zooms when aiming', S().weapon === 'dmr' && camera.fov < 40, 'weapon=' + S().weapon + ' fov=' + camera.fov.toFixed(1));
+  await tap('q');
+  G.local.pitch = .5; const shots0 = S().stats.shots;
+  mouse('mousedown', 0); await frames(2); mouse('mouseup', 0); await waitSim(.3);
+  check('DMR fires one round per click', S().stats.shots === shots0 + 1 && S().mag === 9, 'mag=' + S().mag);
+
+  // Rolling blackouts: districts follow the timetable; lights and the HUD readout follow.
+  const litLights = () => { let n = 0; G.levelRoot.traverse(o => { if (o.isPointLight && o.intensity > 0) n++; }); return n; };
+  G.elapsed = 5; updateBlackout();
+  check('t=5s: Market lit, Harbour dark', districtLit(new THREE.Vector3(-30, 0, 0)) && !districtLit(new THREE.Vector3(30, 0, 0)), 'lights on=' + litLights());
+  G.elapsed = 22; updateBlackout();
+  check('t=22s: Market dark, Civic lit', !districtLit(new THREE.Vector3(-30, 0, 0)) && districtLit(new THREE.Vector3(0, 0, 0)) && litLights() === 4, 'lights on=' + litLights());
+  teleport(0, 10); await frames(3);
+  check('HUD shows the district state', /CIVIC · LIT \d+s/.test(document.getElementById('gridPill').textContent), document.getElementById('gridPill').textContent);
+
+  // Spotter: sees the player in a lit district, marks them, calls in Skimmers after ~6 s.
+  const sp = G.enemies.find(e => e.type.name === 'Spotter' && Math.abs(e.home.x) < 5);
+  sp.pos.set(0, 0, -3); sp.yaw = Math.PI; sp.home.set(0, 0, -3); sp.patrol.set(0, 0, -6); sp.dest.copy(sp.patrol);
+  G.elapsed = 20.5; teleport(0, 10, 0);
+  const n0 = G.enemies.length;
+  G.simSteps = 6; await waitSim(7.5, () => { if (G.local.pos.z !== 10) teleport(0, 10, 0); });
+  check('Spotter spots the player', sp.spotting === true || sp.dead, 'state=' + sp.state);
+  check('Spotter calls in reinforcements', G.enemies.filter(e => e.def.called).length === 2 && G.enemies.length === n0 + 2, '+' + (G.enemies.length - n0));
+  check('spotted player is marked for nearby machines', G.enemies.some(e => e !== sp && !e.dead && e.memory > 0 && e.lastKnown.distanceTo(G.local.pos) < 3));
+
+  for (const [x, z] of [[-20, -13.6], [3.2, 10.6], [15, 11.4]]) { teleport(x, z); await holdE(1.4); }
+  check('three drives -> checkpoint', S().objective === 1 && G.checkpoint?.name === 'Drives recovered', S().objective + ' ' + G.checkpoint?.name);
+  const n1 = G.enemies.length;
+  teleport(-2.2, -38); await holdE(1.9);
+  check('call Juno -> Halvard traces it (spawn)', S().objective === 2 && G.enemies.length === n1 + 3, S().objective + ' +' + (G.enemies.length - n1));
+  teleport(40, -37); await waitSim(.5);
+  check('reach the depot -> checkpoint', S().objective === 3 && G.checkpoint?.name === 'At the depot', S().objective);
+  G.objState.hold = 29.7; teleport(40, -40); await waitSim(3);
+  check('hold the depot -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -322,6 +368,7 @@ async function run() {
   await mission03();
   await mission04();
   await mission05();
+  await mission06();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

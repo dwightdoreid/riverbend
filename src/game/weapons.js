@@ -13,6 +13,8 @@ export const WEAPONS = {
   pistol: { name: 'P12 / SIDEARM', short: 'pistol', mode: 'SEMI-AUTO', cap: 12, reserveMax: 48, interval: .23, reload: 1.5, damage: 43, spread: .011, kick: .024, speed: 205, auto: false, sound: 'pistol' },
   // Close-range pump shotgun: 8 pellets per shell, devastating against Skimmers.
   shotgun: { name: 'SG-8 / SHOTGUN', short: 'shotgun', mode: 'PUMP · 8 PELLETS', cap: 6, reserveMax: 30, interval: .78, reload: 2.6, damage: 15, pellets: 8, pelletSpread: .055, spread: .012, kick: .045, speed: 190, auto: false, sound: 'shotgun' },
+  // Marksman rifle: hard-hitting semi-auto with a strong zoom (zoom = degrees of FOV removed when aiming).
+  dmr: { name: 'DMR-14 / MARKSMAN', short: 'dmr', mode: 'SEMI · ZOOM', cap: 10, reserveMax: 40, interval: .34, reload: 2.4, damage: 70, spread: .0025, kick: .034, speed: 320, auto: false, sound: 'dmr', zoom: 46 },
 };
 export const DEFAULT_LOADOUT = ['rifle', 'pistol'];
 

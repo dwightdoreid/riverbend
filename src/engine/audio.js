@@ -18,12 +18,12 @@ export function setVolume(v) { volume = v; if (master) master.gain.value = v; }
 export function sound(kind = 'shot', level = 1) {
   if (!audio || !master || volume === 0) return;
   const t = audio.currentTime, g = audio.createGain(); g.connect(master);
-  if (kind === 'shot' || kind === 'pistol' || kind === 'blast' || kind === 'shotgun') {
+  if (kind === 'shot' || kind === 'pistol' || kind === 'blast' || kind === 'shotgun' || kind === 'dmr') {
     const n = audio.createBufferSource(); n.buffer = noiseBuffer;
     const f = audio.createBiquadFilter(); f.type = 'lowpass';
-    f.frequency.value = kind === 'blast' ? 380 : kind === 'pistol' ? 2100 : kind === 'shotgun' ? 900 : 1500;
-    const dur = kind === 'blast' ? .42 : kind === 'shotgun' ? .2 : .11;
-    g.gain.setValueAtTime((kind === 'blast' ? .8 : kind === 'shotgun' ? .42 : .28) * level, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
+    f.frequency.value = kind === 'blast' ? 380 : kind === 'pistol' ? 2100 : kind === 'shotgun' ? 900 : kind === 'dmr' ? 1250 : 1500;
+    const dur = kind === 'blast' ? .42 : kind === 'shotgun' || kind === 'dmr' ? .2 : .11;
+    g.gain.setValueAtTime((kind === 'blast' ? .8 : kind === 'shotgun' ? .42 : kind === 'dmr' ? .38 : .28) * level, t); g.gain.exponentialRampToValueAtTime(.001, t + dur);
     n.connect(f); f.connect(g); n.start(t); n.stop(t + Math.min(.21, dur));
     const o = audio.createOscillator(); o.type = 'triangle';
     o.frequency.setValueAtTime(kind === 'blast' ? 90 : 160, t); o.frequency.exponentialRampToValueAtTime(35, t + dur);

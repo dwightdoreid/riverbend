@@ -3,6 +3,7 @@ import { THREE } from '../engine/three.js';
 import { box, cyl, rod, mesh, geo, glow } from '../engine/builders.js';
 import { camera, viewCamera, weaponScene } from '../engine/render.js';
 import { reduced } from '../engine/dom.js';
+import { WEAPONS } from './weapons.js';
 
 const gunRig = new THREE.Group(); weaponScene.add(gunRig);
 const gunModels = {};
@@ -23,6 +24,15 @@ function gunModel(type) {
     box(g, 0, -.15, .09, .09, .22, .11, 'dark').rotation.x = -.24;
     rod(g, [0, .017, -.13], [0, .017, -.2], .019, 'dark', 8); box(g, 0, .09, -.115, .017, .03, .023, 'steel');
     box(g, 0, .09, .08, .06, .025, .03, 'dark'); box(g, .067, -.15, .12, .065, .12, .14, 'green');
+  } else if (type === 'dmr') {
+    box(g, 0, 0, .02, .11, .15, .42, 'dark');                                   // receiver
+    rod(g, [0, .03, -.2], [0, .03, -.86], .02, 'dark', 10);                     // long barrel
+    box(g, 0, .02, -.36, .1, .1, .3, 'edge');                                   // handguard
+    cyl(g, 0, .14, -.05, .04, .04, .32, 'dark', 12).rotation.x = Math.PI / 2;   // scope
+    cyl(g, 0, .14, -.22, .046, .046, .02, 'edge', 12).rotation.x = Math.PI / 2;
+    box(g, 0, .14, .115, .055, .055, .01, new THREE.MeshStandardMaterial({ color: 0x9fd6ff, emissive: 0x2f6fa0, emissiveIntensity: .8 }));
+    box(g, 0, -.2, -.02, .08, .26, .12, 'dark').rotation.x = -.1;               // magazine
+    box(g, 0, -.05, .32, .11, .17, .3, 'edge'); box(g, 0, -.17, .13, .08, .2, .1, 'edge').rotation.x = -.3;
   } else if (type === 'shotgun') {
     box(g, 0, 0, .02, .12, .14, .36, 'dark');                                   // receiver
     rod(g, [0, .03, -.15], [0, .03, -.72], .026, 'steel', 10);                  // barrel
@@ -36,7 +46,7 @@ function gunModel(type) {
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
 }
-['rifle', 'pistol', 'shotgun', 'grenade'].forEach(gunModel);
+['rifle', 'pistol', 'shotgun', 'dmr', 'grenade'].forEach(gunModel);
 
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdca1, transparent: true, opacity: .9, depthTest: false });
 const muzzle = mesh(gunRig, geo('cone', .075, .23, 5), flashMat, 0, .03, -.79);
@@ -45,16 +55,19 @@ muzzle.rotation.x = -Math.PI / 2; muzzle.visible = false;
 export function updateCamera(p) {
   camera.position.set(p.pos.x, p.eye + (reduced ? 0 : Math.sin(p.bob) * .016 * p.moving), p.pos.z);
   camera.rotation.set(THREE.MathUtils.clamp(p.pitch + p.kick, -1.35, 1.35), p.yaw, 0, 'YXZ');
-  camera.fov = 78 - p.aimBlend * 21; camera.updateProjectionMatrix();
+  camera.fov = 78 - p.aimBlend * (WEAPONS[p.weapon]?.zoom ?? 21); camera.updateProjectionMatrix();
 }
 
 export function updateViewModel(p) {
   const armed = p.alive && !p.downed;
-  for (const [k, g] of Object.entries(gunModels)) g.visible = armed && k === p.weapon;
+  // Fully aimed with a scoped weapon: hide the gun and show the scope overlay instead.
+  const scoped = armed && p.weapon === 'dmr' && p.aimBlend > .8;
+  document.getElementById('scope').classList.toggle('on', scoped);
+  for (const [k, g] of Object.entries(gunModels)) g.visible = armed && !scoped && k === p.weapon;
   const portrait = innerHeight > innerWidth, scale = portrait ? .8 : 1, pistol = p.weapon === 'pistol';
   gunRig.scale.setScalar(scale);
   const x = THREE.MathUtils.lerp((pistol ? .24 : .29) * (portrait ? .62 : 1), 0, p.aimBlend);
-  const y = THREE.MathUtils.lerp(-.25 * scale, (pistol ? -.09 : -.185) * scale, p.aimBlend);
+  const y = THREE.MathUtils.lerp(-.25 * scale, (pistol ? -.09 : p.weapon === 'dmr' ? -.14 : -.185) * scale, p.aimBlend);
   const z = (pistol ? -.46 : -.49) * (portrait ? 1.1 : 1);
   const bob = (reduced ? 0 : Math.sin(p.bob) * .009 * p.moving) * (1 - p.aimBlend * .8);
   gunRig.position.set(x + bob, y + Math.abs(bob) + p.weaponKick * .4, z + p.weaponKick);
@@ -65,6 +78,6 @@ export function updateViewModel(p) {
   }
   if (p.swapLeft > 0) gunRig.position.y -= p.swapLeft * .8;
   muzzle.visible = armed && p.muzzleLeft > 0 && p.weapon !== 'grenade';
-  muzzle.position.z = pistol ? -.22 : p.weapon === 'shotgun' ? -.74 : -.78; muzzle.rotation.z = Math.random() * 6;
+  muzzle.position.z = pistol ? -.22 : p.weapon === 'shotgun' ? -.74 : p.weapon === 'dmr' ? -.88 : -.78; muzzle.rotation.z = Math.random() * 6;
   viewCamera.fov = 70 - p.aimBlend * 7; viewCamera.updateProjectionMatrix();
 }

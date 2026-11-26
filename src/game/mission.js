@@ -11,6 +11,7 @@ import { LEVELS } from '../levels/index.js';
 import { spawnProps, spawnPickups, repairProp } from './props.js';
 import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
 import { clearBossFx } from './bosses.js';
+import { resetBlackout, updateBlackout } from './blackout.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive } from './combat.js';
@@ -62,7 +63,7 @@ export function prepareMission(mission, checkpoint = null) {
   loadLevel(level);
   G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}) };
   applyEnvironment(G.env);
-  clearCombat(); clearRadio(); clearTurrets(); clearBossFx();
+  clearCombat(); clearRadio(); clearTurrets(); clearBossFx(); resetBlackout();
   if (G.dynRoot) G.dynRoot.removeFromParent();
   G.dynRoot = new THREE.Group(); scene.add(G.dynRoot);
   clearMovers();
@@ -75,6 +76,7 @@ export function prepareMission(mission, checkpoint = null) {
   spawnEnemies(mission.enemies ?? []);
   G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
+  updateBlackout();
   updateHUD();
 }
 

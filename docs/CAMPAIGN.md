@@ -139,5 +139,7 @@ There are 13 environments, and some are reused with different lighting or layout
      - 03 *Switchback*: escort and the SG-8 shotgun.
      - 04 *Hold Fast*: turrets, generators and survive waves.
      - 05 *Spillway*: the Bulwark, doors, the Spillway Warden boss, and the Halvard reveal.
-   - **Next:** Act II, *Load Shed*, in Port Calder (missions 06–10).
+   - **In progress: Act II, *Load Shed*, in Port Calder.**
+     - Done: 06 *Brownout*: rolling blackouts, the Spotter, the DMR-14, and Juno's evidence.
+     - Next: 07 *Undercurrent*: cable tunnels, the Lineman crawler and smoke grenades.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

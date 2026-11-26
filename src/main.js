@@ -16,6 +16,7 @@ import { setupCoopPanel } from './ui/menu.js';
 import { updateAvatars } from './game/avatars.js';
 import { updateTurrets } from './game/turrets.js';
 import { updateShells, updateMarkers } from './game/bosses.js';
+import { updateBlackout } from './game/blackout.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -52,6 +53,7 @@ function step(dt) {
   updateDowned(dt);
   updateBots(dt);
   updateTurrets(dt);
+  updateBlackout();
   updateShells(dt);
   updateMarkers(dt);
   updateProjectiles(dt);
@@ -73,6 +75,7 @@ function clientStep(dt) {
   updateProjectiles(dt);
   updateEffects(dt);
   updateMarkers(dt);
+  updateBlackout();
 }
 
 let last = performance.now();

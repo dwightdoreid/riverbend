@@ -4,6 +4,7 @@ import { THREE } from '../engine/three.js';
 import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
 import { G } from './state.js';
 import { addMover } from './world.js';
+import { districtLit } from './blackout.js';
 import { burst } from './combat.js';
 import { runEvents } from './mission.js';
 
@@ -164,6 +165,39 @@ const PROP_TYPES = {
     };
   },
 
+  // A courier case left as a dead drop, with a blinking status LED. Style 'gone' once taken.
+  drive(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const led = emissive(0x5ce08a, 2);
+    box(root, x, (def.y ?? 0) + .14, z, .55, .28, .4, 'dark'); box(root, x, (def.y ?? 0) + .3, z, .2, .04, .06, 'steel');
+    box(root, x + .2, (def.y ?? 0) + .2, z + .21, .06, .06, .02, led);
+    return {
+      root, pos: new THREE.Vector3(x, (def.y ?? 0) + .5, z),
+      setStyle(s) { root.visible = s !== 'gone'; },
+      update(t, i) { led.emissiveIntensity = Math.sin(t * 6 + i) > .3 ? 3 : .2; },
+    };
+  },
+
+  // Street payphone.
+  payphone(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
+    box(g, 0, 1.1, 0, .9, 2.2, .5, 'blue'); box(g, 0, 2.3, 0, 1, .2, .6, 'white');
+    box(g, 0, 1.35, -.27, .5, .7, .05, 'dark'); box(g, .2, 1.4, -.31, .1, .35, .06, 'steel');
+    const screen = box(g, -.12, 1.55, -.3, .2, .12, .02, emissive(0x9fd6ff, 1.2));
+    return {
+      root, pos: new THREE.Vector3(x, 1.3, z),
+      setStyle() {},
+      update(t) { screen.material.emissiveIntensity = 1 + Math.sin(t * 3) * .4; },
+    };
+  },
+
+  // Invisible point used as an objective target (reach / hold objectives).
+  marker(parent, def) {
+    const root = new THREE.Group(); parent.add(root);
+    return { root, pos: new THREE.Vector3(def.at[0], 1, def.at[1]), setStyle() {}, update() {} };
+  },
+
   // Diesel generator set. Styles: 'running' (green lamp, exhaust shimmer), 'tripped', 'wrecked'.
   generator(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -191,7 +225,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle' };
 
 export function spawnProps(defs) {
   G.props = {};
@@ -216,6 +250,7 @@ export function updateProps(activeIds) {
 
 /** Is this position inside the pool of any switched-on floodlight? */
 export function litAt(pos) {
+  if (districtLit(pos)) return true;
   for (const p of Object.values(G.props)) {
     if (p.lit && Math.hypot(pos.x - p.lightCenter.x, pos.z - p.lightCenter.z) < p.lightRadius) return true;
   }

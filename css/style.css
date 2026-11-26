@@ -55,3 +55,15 @@
 #bossBar i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#c2502f,#f48c72);transition:width .2s}
 #bossBar.exposed i{background:linear-gradient(90deg,#f3ba65,#ffe1a0)}
 #bossBar.exposed b::after{content:' · VENTS OPEN';color:var(--amber)}
+
+/* Rolling-blackout readout */
+#gridPill{display:none;font-weight:650;color:#9fb6c8}
+#gridPill.on{display:block}
+#gridPill.lit{color:#f3ba65}
+
+/* Marksman scope view (DMR fully aimed) */
+#scope{position:absolute;inset:0;display:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent 31vmin,#05090bdd 31.4vmin,#05090b 34vmin)}
+#scope.on{display:block}
+#scope::before,#scope::after{content:'';position:absolute;left:50%;top:50%;background:#0b1114cc}
+#scope::before{width:62vmin;height:1px;transform:translate(-50%,-50%)}
+#scope::after{width:1px;height:62vmin;transform:translate(-50%,-50%)}

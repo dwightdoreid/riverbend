@@ -5,7 +5,7 @@ import { $, coarse } from './engine/dom.js';
 import { canvas } from './engine/render.js';
 import { initAudio } from './engine/audio.js';
 import { G } from './game/state.js';
-import { reload, throwGrenade, switchWeapon } from './game/weapons.js';
+import { reload, throwGrenade, switchWeapon, WEAPONS } from './game/weapons.js';
 import { deployTurret } from './game/turrets.js';
 import { pause } from './game/flow.js';
 import { say } from './ui/hud.js';
@@ -51,7 +51,8 @@ function toggleLight() { me().flashlight = !me().flashlight; $('lightBtn').class
 function toggleAim() { me().aiming = !me().aiming; $('aimBtn').classList.toggle('primary', me().aiming); }
 
 function look(dx, dy, touch) {
-  const p = me(), factor = (touch ? .004 : .0022) * settings.sensitivity * (1 - p.aimBlend * .3);
+  // Slower look while zoomed, in proportion to the weapon's zoom (DMR zooms furthest).
+  const p = me(), zoom = (WEAPONS[p.weapon]?.zoom ?? 21) / 78, factor = (touch ? .004 : .0022) * settings.sensitivity * (1 - p.aimBlend * zoom * 1.1);
   p.yaw -= dx * factor; p.pitch = THREE.MathUtils.clamp(p.pitch - dy * factor, -1.3, 1.3);
 }
 

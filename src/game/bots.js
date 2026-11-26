@@ -59,6 +59,78 @@ export const ENEMY_TYPES = {
       return [];
     },
   },
+  // High-flying, unarmed observer. When it sees a player it marks them for every machine within
+  // 55 m and calls in Skimmers every 14 s until it loses sight or is shot down.
+  spotter: {
+    name: 'Spotter', hp: 60, color: 0x58636a,
+    hover: 5.2, bob: .25, eyeY: 5.2, muzzle: [0, 5, 0], centerY: 5.2, coneTilt: -.42,
+    hitParts: [{ y: 5.2, r: .62, head: false }, { y: 5.05, r: .25, head: true, z: -.5 }],
+    speed: { patrol: 2, search: 3, close: 3, retreat: 3, strafe: 2.2 },
+    sight: { stand: 42, crouch: 34, crouchStill: 26, fov: -.15 },
+    range: { far: 99, near: 0 }, strafeSwap: 3,
+    gun: { speed: 0, damage: 0, cooldown: [9, 0], spread: [0, 0], sound: 'radio' },
+    build(g, bodyMat) {
+      cyl(g, 0, 5.2, 0, .55, .45, .32, bodyMat, 16);
+      cyl(g, 0, 5.42, 0, .22, .3, .16, 'dark', 12);
+      const lens = cyl(g, 0, 5.05, -.48, .2, .24, .18, new THREE.MeshStandardMaterial({ color: 0x9fd6ff, emissive: 0x3f8fd0, emissiveIntensity: 1.4 }), 14);
+      lens.rotation.x = Math.PI / 2;
+      const beacon = box(g, 0, 5.55, .1, .14, .1, .14, glowEye(0xff3a3a, 0xff2020)); g.userData.beacon = beacon.material;
+      rod(g, [0, 5.4, .25], [0, 6.1, .45], .02, 'steel', 5);
+      const rotors = [];
+      for (const s of [-1, 1]) { rod(g, [0, 5.25, 0], [s * .85, 5.3, 0], .05, 'edge', 6); rotors.push(box(g, s * .85, 5.4, 0, .9, .015, .09, 'steel')); }
+      return rotors;
+    },
+    pose(e) {
+      const b = e.g.userData.beacon;
+      if (b) b.emissiveIntensity = e.spotting ? (Math.sin(G.elapsed * 14) > 0 ? 3 : .2) : (Math.sin(G.elapsed * 2) > .7 ? 2 : .3);
+    },
+    update(e, dt, from) {
+      if (isClient()) return;
+      const T = e.type;
+      e.sense -= dt;
+      if (e.sense <= 0) {
+        e.sense = .25;
+        let best = null, bd = Infinity;
+        for (const p of G.players) { if (!isActive(p)) continue; const d = canSee(e, from, p); if (d >= 0 && d < bd) { best = p; bd = d; } }
+        e.visible = !!best;
+        if (best) {
+          if (!e.spotting) { e.callTimer = 6; feed('Spotter has eyes on ' + (best.local ? 'you' : best.name)); }
+          e.spotting = true; e.state = 'engage'; e.target = best; e.memory = 6; e.seenAt = G.elapsed; e.lastKnown.copy(best.pos);
+          for (const o of G.enemies) {
+            if (o === e || o.dead || o.pos.distanceTo(best.pos) > 55) continue;
+            o.lastKnown.copy(best.pos); o.memory = Math.max(o.memory, 8);
+            if (o.state === 'patrol') o.state = 'investigate';
+          }
+        } else { e.spotting = false; if (e.state === 'engage') e.state = 'search'; }
+      }
+      const t = e.target;
+      if (e.spotting && t) {
+        const d = flatDist(e.pos, t.pos);
+        e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+        if (d > 17) navigate(e, t.pos, T.speed.close, dt);
+        else if (d < 10) botMove(e, e.pos.clone().sub(t.pos).normalize().multiplyScalar(4).add(e.pos), T.speed.retreat, dt);
+        else { e.timer += dt; if (e.timer > T.strafeSwap) { e.dodge *= -1; e.timer = 0; } botMove(e, new THREE.Vector3(Math.cos(e.yaw) * e.dodge, 0, -Math.sin(e.yaw) * e.dodge).add(e.pos), T.speed.strafe, dt); }
+        e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+        e.beep = (e.beep ?? 0) - dt;
+        if (e.beep <= 0) { e.beep = 1.1; sfxAt(e.pos, 'radio', .5, 60); }
+        e.callTimer -= dt;
+        if (e.callTimer <= 0) {
+          e.callTimer = 14;
+          const called = G.enemies.filter(o => !o.dead && o.def.called).length;
+          const points = (G.mission.reinforcements ?? []).map(([x, z]) => ({ x, z, d: Math.hypot(x - t.pos.x, z - t.pos.z) })).filter(q => q.d > 25).sort((a, b) => a.d - b.d);
+          if (called < 6 && points.length) {
+            for (let i = 0; i < 2; i++) addEnemy({ type: 'skimmer', at: [points[0].x + i * 1.5, points[0].z], called: true }, t.pos.clone());
+            feed('Spotter called in Skimmers');
+          }
+        }
+      } else if (e.memory > 0) navigate(e, e.lastKnown, T.speed.search, dt);
+      else {
+        e.state = 'patrol';
+        if (e.pos.distanceTo(e.dest) < .9) e.dest.copy(e.dest.distanceTo(e.home) < 1 ? e.patrol : e.home);
+        navigate(e, e.dest, T.speed.patrol, dt);
+      }
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,
@@ -89,7 +161,7 @@ function makeCone(T) {
   const cg = new THREE.ConeGeometry(r, len, 18, 1, true);
   cg.rotateX(Math.PI / 2); cg.translate(0, 0, -len / 2);
   const m = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: 0xf3a55a, transparent: true, opacity: .045, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-  m.position.y = T.eyeY; m.renderOrder = 2;
+  m.position.y = T.eyeY; m.rotation.x = T.coneTilt ?? 0; m.renderOrder = 2;
   return m;
 }
 

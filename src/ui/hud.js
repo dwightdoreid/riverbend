@@ -9,6 +9,7 @@ import { spreadOf } from '../game/players.js';
 import { objectiveText, objectivePosFor, objectivePositions, currentObjective, inHoldZone } from '../game/mission.js';
 import { sound } from '../engine/audio.js';
 import { fxAll, isClient, inCoop } from '../net/net.js';
+import { districtAt, districtState } from '../game/blackout.js';
 
 const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
 
@@ -117,6 +118,10 @@ export function updateUI(dt) {
   updateRadio(dt);
   $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
   updateDownedUI(p);
+  // Rolling-blackout readout for the district the player is in.
+  const dist = G.mission?.blackout ? districtAt(p.pos) : null, ds = districtState(dist);
+  $('gridPill').classList.toggle('on', !!ds);
+  if (ds) { $('gridPill').textContent = dist.label.toUpperCase() + ' · ' + (ds.lit ? 'LIT ' : 'DARK ') + Math.ceil(ds.left) + 's'; $('gridPill').classList.toggle('lit', ds.lit); }
   const boss = G.enemies.find(e => e.type.boss && !e.dead);
   $('bossBar').classList.toggle('on', !!boss);
   if (boss) {
