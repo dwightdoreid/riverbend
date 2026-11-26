@@ -150,5 +150,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 12 *Three-Way*: the uplink objective, relays that are knocked offline and rebooted, and three-way fights over the ridge.
      - Done: 13 *Static*: the EMP HUD with stereo objective pings, beacon landmarks, the Arc lobber and its electric fields, and EMP grenades.
      - Done: 14 *Cold Iron*: snow, the Hauler with its rear weak spot, and battery wagons shunted onto the train.
-     - Next: 15 *Black Box*: stealth infiltration of the Halvard office (Act III finale).
+     - Done: 15 *Black Box*: stealth (cameras, detection, alarm waves), takedowns, suppressed pistol. Act III complete.
+     - Next: Act IV, 16–20: the race to LODESTAR before Halvard overloads its core.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

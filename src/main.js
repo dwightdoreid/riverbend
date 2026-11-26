@@ -19,6 +19,7 @@ import { updateShells, updateMarkers, updateFields } from './game/bosses.js';
 import { updateBlackout } from './game/blackout.js';
 import { updateSwitching } from './game/switching.js';
 import { updateWeather } from './game/weather.js';
+import { updateStealth } from './game/stealth.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -59,6 +60,7 @@ function step(dt) {
   updateSmokes(dt);
   updateSwitching(dt);
   updateWeather(dt);
+  updateStealth(dt);
   updateShells(dt);
   updateMarkers(dt);
   updateFields(dt);

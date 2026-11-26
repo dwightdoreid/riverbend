@@ -84,3 +84,10 @@ body.emp #compass,body.emp #threat{color:#8fa3a8;letter-spacing:6px}
 #static{position:absolute;inset:0;pointer-events:none;display:none;background:repeating-linear-gradient(0deg,#ffffff07 0 1px,transparent 1px 3px);mix-blend-mode:screen}
 body.emp #static{display:block;animation:staticFlicker .18s steps(2) infinite}
 @keyframes staticFlicker{0%{opacity:.5;transform:translateY(0)}50%{opacity:.85;transform:translateY(1px)}100%{opacity:.6;transform:translateY(-1px)}}
+
+/* Stealth readout */
+#stealthPill{display:none;font-weight:650;color:#9fd6ae}
+#stealthPill.on{display:block}
+#stealthPill.detect{color:var(--amber)}
+#stealthPill.alarm{color:var(--red);animation:alarmBlink .6s steps(2) infinite}
+@keyframes alarmBlink{50%{opacity:.4}}

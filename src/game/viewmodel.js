@@ -19,7 +19,8 @@ function gunModel(type) {
     box(g, 0, -.23, -.06, .09, .3, .16, 'dark').rotation.x = -.13;
     box(g, 0, .14, .05, .08, .06, .09, 'edge'); mesh(g, geo('torus', .048, .008, 5, 14), 'dark', 0, .19, -.02);
     box(g, 0, .19, -.019, .006, .006, .005, glow); box(g, -.1, -.09, -.2, .08, .1, .21, 'green'); box(g, .09, -.17, .1, .08, .12, .16, 'green');
-  } else if (type === 'pistol') {
+  } else if (type === 'pistol' || type === 'spistol') {
+    if (type === 'spistol') rod(g, [0, .017, -.13], [0, .017, -.36], .032, 'dark', 10);   // suppressor
     box(g, 0, .02, -.01, .105, .11, .27, 'edge'); box(g, 0, -.035, .02, .09, .06, .24, 'dark');
     box(g, 0, -.15, .09, .09, .22, .11, 'dark').rotation.x = -.24;
     rod(g, [0, .017, -.13], [0, .017, -.2], .019, 'dark', 8); box(g, 0, .09, -.115, .017, .03, .023, 'steel');
@@ -53,7 +54,7 @@ function gunModel(type) {
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
 }
-['rifle', 'pistol', 'shotgun', 'dmr', 'arc', 'grenade'].forEach(gunModel);
+['rifle', 'pistol', 'spistol', 'shotgun', 'dmr', 'arc', 'grenade'].forEach(gunModel);
 
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdca1, transparent: true, opacity: .9, depthTest: false });
 const muzzle = mesh(gunRig, geo('cone', .075, .23, 5), flashMat, 0, .03, -.79);
@@ -71,7 +72,7 @@ export function updateViewModel(p) {
   const scoped = armed && p.weapon === 'dmr' && p.aimBlend > .8;
   document.getElementById('scope').classList.toggle('on', scoped);
   for (const [k, g] of Object.entries(gunModels)) g.visible = armed && !scoped && k === p.weapon;
-  const portrait = innerHeight > innerWidth, scale = portrait ? .8 : 1, pistol = p.weapon === 'pistol';
+  const portrait = innerHeight > innerWidth, scale = portrait ? .8 : 1, pistol = p.weapon === 'pistol' || p.weapon === 'spistol';
   gunRig.scale.setScalar(scale);
   const x = THREE.MathUtils.lerp((pistol ? .24 : .29) * (portrait ? .62 : 1), 0, p.aimBlend);
   const y = THREE.MathUtils.lerp(-.25 * scale, (pistol ? -.09 : p.weapon === 'dmr' ? -.14 : -.185) * scale, p.aimBlend);
@@ -84,7 +85,7 @@ export function updateViewModel(p) {
     gunRig.position.y -= Math.sin(t * Math.PI) * .19; gunRig.rotation.z = -Math.sin(t * Math.PI) * .5; gunRig.rotation.x -= Math.sin(t * Math.PI) * .25;
   }
   if (p.swapLeft > 0) gunRig.position.y -= p.swapLeft * .8;
-  muzzle.visible = armed && p.muzzleLeft > 0 && p.weapon !== 'grenade';
+  muzzle.visible = armed && p.muzzleLeft > 0 && p.weapon !== 'grenade' && p.weapon !== 'spistol';
   muzzle.position.z = pistol ? -.22 : p.weapon === 'shotgun' ? -.74 : p.weapon === 'dmr' ? -.88 : -.78; muzzle.rotation.z = Math.random() * 6;
   viewCamera.fov = 70 - p.aimBlend * 7; viewCamera.updateProjectionMatrix();
 }

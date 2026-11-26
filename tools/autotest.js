@@ -721,6 +721,68 @@ async function mission14() {
   check('train rolls -> mission won', S().status === 'won', S().status);
 }
 
+async function mission15() {
+  await goNext(15);
+  check('mission 15: Halvard office at night', S().status === 'briefing' && S().mission === 'm15' && G.level.id === 'office', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  check('stealth readout: UNDETECTED', document.getElementById('stealthPill').textContent === 'UNDETECTED' && S().weapon === 'spistol');
+
+  // A camera sees you: the meter fills; step out of view and it drains.
+  await waitSim(Math.max(0, G.protectUntil + 1.2 - G.elapsed), () => teleport(-37, 10));   // detection grace at mission start
+  const cl = G.props.camLobby;
+  G.simSteps = 1;   // fine steps so the meter doesn't overshoot into an alarm
+  teleport(0, 14, 0); await waitSim(.5, () => { cl.yaw = 0; teleport(0, 14, 0); });
+  const m1 = G.stealth.meter; teleport(-37, 10); G.simSteps = 6;
+  check('a camera fills the detection meter', m1 > .3 && !G.stealth.alarm && /DETECTED/.test(document.getElementById('stealthPill').textContent), m1.toFixed(2));
+  teleport(-37, 10); await waitSim(1.2);
+  check('out of view, detection drains', G.stealth.meter < m1, G.stealth.meter.toFixed(2));
+
+  // Silent takedown from behind an unaware guard.
+  G.stealth.meter = 0;
+  const gd = G.enemies.find(e => e.def.guard && Math.abs(e.home.x + 24) < 1 && e.home.z < -5);   // executive suite: no cameras
+  gd.state = 'patrol'; gd.memory = 0; gd.yaw = 0; gd.home.copy(gd.pos); gd.patrol.copy(gd.pos); gd.dest.copy(gd.pos);   // standing still, facing north
+  const gf = new THREE.Vector3(-Math.sin(gd.yaw), 0, -Math.cos(gd.yaw));
+  const behind = () => teleport(gd.pos.x - gf.x * 1.3, gd.pos.z - gf.z * 1.3, gd.yaw);
+  behind(); G.simSteps = 1; await frames(2);
+  const offered = G.local.interaction?.type === 'takedown';
+  key('keydown', 'e'); await waitSim(.6, () => { gd.yaw = 0; behind(); }); key('keyup', 'e'); G.simSteps = 6;
+  check('silent takedown from behind', offered && gd.dead && !G.stealth.alarm, 'offered=' + offered + ' dead=' + gd.dead);
+
+  // Suppressed pistol barely carries; the rifle wakes the building.
+  const listener = G.enemies.find(e => !e.dead && e.def.guard && e.home.x > 10 && e.home.z < -5);   // server room guard
+  teleport(listener.pos.x + 10, listener.pos.z, -Math.PI / 2); listener.memory = 0; listener.state = 'patrol'; G.local.pitch = .9;
+  await tap('1'); await waitSim(.3); mouse('mousedown', 0); await frames(1); mouse('mouseup', 0); await frames(2);
+  const quiet = listener.memory === 0;
+  await tap('2'); await waitSim(.4); mouse('mousedown', 0); await frames(2); mouse('mouseup', 0); await frames(2);
+  check('suppressed shots stay quiet; rifle fire alerts guards', quiet && listener.memory > 0, 'quiet=' + quiet + ' mem=' + listener.memory.toFixed(1));
+  // The rifle shot woke every guard in earshot (as it would in play); settle them before carrying on.
+  for (const e of G.enemies) if (!e.dead) { e.memory = 0; e.state = 'patrol'; e.target = null; e.visible = false; }
+  G.stealth.meter = 0;
+
+  teleport(15, 13.2); await holdE(2.7);
+  check('security terminal loops every camera', ['camCorW', 'camCorE', 'camLobby', 'camServer', 'camOffices'].every(id => G.props[id].style === 'off') && G.props.secTerm.used);
+
+  teleport(-32.5, 9); await holdE(2.7);
+  check('side door bypassed', S().objective === 1 && G.props.sideDoor.style === 'open', S().objective);
+  damageEnemy(listener, 1e6, false, G.local);   // deal with the server-room guard first, as a player would
+  const n0 = G.enemies.length;
+  check('still undetected before the copy', !G.stealth.alarm, G.stealth.meter.toFixed(2));
+  teleport(24, -12.1); await holdE(6.3); await waitSim(.5);
+  check('copying the logs trips the alarm + checkpoint', S().objective === 2 && G.stealth.alarm && G.checkpoint?.name === 'Logs copied' && G.enemies.length >= n0 + 3, 'alarm=' + G.stealth.alarm);
+  check('escape timer shown', /⏱/.test(document.getElementById('objectiveSub').textContent));
+  const n1 = G.enemies.length; G.stealth.waveT = .05; await waitSim(.4);
+  check('alarm keeps sending Tallymen', G.enemies.length === n1 + 2, '+' + (G.enemies.length - n1));
+  teleport(-36, 9); await waitSim(3);
+  check('out to the yard -> Act III complete', S().status === 'won' && /overload LODESTAR/.test(document.getElementById('menuText').textContent), S().status);
+
+  // Replay: linger in a camera's view and it raises the alarm by itself.
+  await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode(); await frames(3);
+  const c2 = G.props.camLobby;
+  await waitSim(Math.max(0, G.protectUntil + 1.2 - G.elapsed), () => teleport(-37, 10));
+  await waitSim(2, () => { c2.yaw = 0; teleport(0, 14, 0); });
+  check('staying on camera raises the alarm', G.stealth.alarm && document.getElementById('stealthPill').textContent === 'ALARM');
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -728,7 +790,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -753,6 +815,7 @@ async function run() {
   await mission12();
   await mission13();
   await mission14();
+  await mission15();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

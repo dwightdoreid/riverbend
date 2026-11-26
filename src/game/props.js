@@ -384,6 +384,27 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Security camera on a wall bracket, sweeping +-sweep radians around def.yaw. Style 'on'/'off'.
+  camera(parent, def) {
+    const [x, z] = def.at, h = def.height ?? 3.3, root = new THREE.Group(); parent.add(root);
+    rod(root, [x, h + .4, z], [x, h, z], .05, 'dark', 6);
+    const head = new THREE.Group(); head.position.set(x, h, z); root.add(head);
+    box(head, 0, 0, -.15, .26, .22, .5, 'white'); box(head, 0, 0, -.42, .2, .16, .06, 'dark');
+    const led = box(head, .08, .08, -.36, .05, .05, .02, emissive(0xff2a2a, 2.4));
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(13 * Math.tan(.5), 13, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xff6a5a, transparent: true, opacity: .05, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    cone.geometry.rotateX(Math.PI / 2); cone.geometry.translate(0, 0, -6.5); cone.rotation.x = -.18; head.add(cone);
+    const prop = {
+      root, pos: new THREE.Vector3(x, 1, z), eye: new THREE.Vector3(x, h, z), yaw: def.yaw ?? 0,
+      setStyle(s) { const on = s === 'on'; cone.visible = on; led.material.emissiveIntensity = on ? 2.4 : 0; },
+      update(t) {
+        if (prop.style === 'on') prop.yaw = (def.yaw ?? 0) + Math.sin(t * (def.speed ?? .5) + (def.phase ?? 0)) * (def.sweep ?? .8);
+        head.rotation.y = prop.yaw;
+        if (G.stealth?.seenBy && prop.style === 'on') cone.material.opacity = .08 + Math.sin(t * 12) * .03; else cone.material.opacity = .05;
+      },
+    };
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -432,12 +453,12 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on' };
 
 export function spawnProps(defs) {
   G.props = {};
   for (const def of defs) {
-    const p = Object.assign(PROP_TYPES[def.type](G.dynRoot, def), { id: def.id, type: def.type, label: def.label });
+    const p = Object.assign(PROP_TYPES[def.type](G.dynRoot, def), { id: def.id, type: def.type, label: def.label, use: def.use ?? null, used: false });
     const setStyle = p.setStyle;
     p.setStyle = s => { p.style = s; setStyle(s); };
     p.setStyle(def.style ?? DEFAULT_STYLE[def.type]);

@@ -12,6 +12,7 @@ import { fxAll, isClient, inCoop } from '../net/net.js';
 import { districtAt, districtState } from '../game/blackout.js';
 import { liveAt } from '../game/switching.js';
 import { windVec } from '../game/weather.js';
+import { DETECT_FULL } from '../game/stealth.js';
 
 const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
 
@@ -137,6 +138,12 @@ export function updateUI(dt) {
       ui.pingT = THREE.MathUtils.clamp(d / 30, .6, 2.4);
       soundPanned('radio', Math.max(.15, 1 - d / 90), Math.sin(rel));
     }
+  }
+  const sp = $('stealthPill'), st = G.stealth;
+  sp.classList.toggle('on', !!st);
+  if (st) {
+    sp.classList.toggle('alarm', st.alarm); sp.classList.toggle('detect', !st.alarm && st.meter > .02);
+    sp.textContent = st.alarm ? 'ALARM' : st.meter > .02 ? 'DETECTED ' + Math.round(st.meter / DETECT_FULL * 100) + '%' : 'UNDETECTED';
   }
   $('liveWarn').classList.toggle('on', p.alive && !p.downed && liveAt(p.pos));
   // Wind readout: arrow shows where the wind blows, relative to where you're facing.

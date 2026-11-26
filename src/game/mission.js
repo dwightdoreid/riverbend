@@ -14,6 +14,8 @@ import { clearBossFx } from './bosses.js';
 import { resetBlackout, updateBlackout } from './blackout.js';
 import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './switching.js';
 import { setupWeather } from './weather.js';
+import { setupStealth, raiseAlarm } from './stealth.js';
+import { damageEnemy } from './combat.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive, clearSmokes } from './combat.js';
@@ -76,6 +78,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupEscort(mission.escort);
   setupSwitching();
   setupWeather();
+  setupStealth();
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
   G.players.forEach((p, i) => {
@@ -304,6 +307,7 @@ const EVENTS = {
     if (ev.feed) feed(ev.feed);
   },
   checkpoint: ev => takeCheckpoint(ev.name),
+  alarm: ev => raiseAlarm(ev.reason ?? 'Intrusion detected'),
   giveTurrets: ev => { for (const p of G.players) p.turrets = (p.turrets ?? 0) + (ev.count ?? 1); feed('+' + (ev.count ?? 1) + ' turret' + ((ev.count ?? 1) > 1 ? 's' : '') + ' each'); updateHUD(); },
   win: () => finish(true),
   fail: () => finish(false),
@@ -370,6 +374,8 @@ function takeCheckpoint(name = 'Checkpoint') {
     escort: G.escort ? { s: G.escort.s, hp: G.escort.hp } : null,
     propHp: Object.fromEntries(Object.values(G.props).filter(p => p.maxHp).map(p => [p.id, p.hp])),
     turrets: snapshotTurrets(),
+    stealth: G.stealth ? { meter: G.stealth.meter, alarm: G.stealth.alarm } : null,
+    used: Object.values(G.props).filter(q => q.used).map(q => q.id),
     enemies: snapshotEnemies(),
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
@@ -402,6 +408,8 @@ function applyCheckpoint(c) {
     p.emps = Math.max(s.emps ?? 0, G.mission.emps ? 1 : 0);
   });
   restoreTurrets(c.turrets ?? []);
+  if (G.stealth && c.stealth) Object.assign(G.stealth, c.stealth, { waveT: G.mission.stealth?.waves?.every ?? 30 });
+  for (const id of c.used ?? []) if (G.props[id]) G.props[id].used = true;
 }
 
 // ---------------------------------------------------------------- interaction
@@ -411,7 +419,18 @@ function interactionCandidate(p) {
   for (const q of G.players) {
     if (q !== p && q.downed && flat(q.pos, p.pos) < 2.2) return { type: 'revive', obj: q, name: 'Revive ' + q.name, time: 3 };
   }
+  // Silent takedown: from behind, on a machine that hasn't spotted you.
+  for (const e of G.enemies) {
+    if (e.dead || e.type.boss || e.state === 'engage' || (e.elev ?? 0) > 1) continue;
+    const d = flat(e.pos, p.pos); if (d > 1.9) continue;
+    const fwd = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw)), toMe = new THREE.Vector3(p.pos.x - e.pos.x, 0, p.pos.z - e.pos.z).normalize();
+    if (fwd.dot(toMe) < -.3) return { type: 'takedown', obj: e, name: 'Takedown', time: .35 };
+  }
   const o = currentObjective(), kind = o?.type ?? 'interact';
+  // Optional actions on props (def.use: { action, time, events }), e.g. looping the cameras.
+  for (const q of Object.values(G.props)) {
+    if (q.use && !q.used && flat(q.pos, p.pos) < (q.use.reach ?? 2.4)) return { type: 'use', obj: q, name: q.use.action, time: q.use.time ?? 2 };
+  }
   if (kind === 'switching') {
     const id = breakerNear(p, o.reach ?? 2.6);
     if (id) return { type: 'breaker', obj: id, name: (isClosed(id) ? 'Open' : 'Close') + ' breaker ' + id, time: o.time ?? 1.4 };
@@ -448,6 +467,8 @@ export function updateInteract(p, dt) {
   if (p.interactTime < c.time) return;
   p.interactTime = 0;
   if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
+  if (c.type === 'takedown') { if (!c.obj.dead && c.obj.state !== 'engage') { damageEnemy(c.obj, 1e6, false, p, { explosive: true }); feed('Silent takedown'); } return; }
+  if (c.type === 'use') { c.obj.used = true; sfxFor(p, 'objective'); runEvents(c.obj.use.events); updateHUD(); return; }
   if (c.type === 'breaker') { operate(c.obj, p); updateHUD(); return; }
   if (c.type === 'reboot') { rebootProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' rebooted ' + (c.obj.label ?? 'equipment')); updateHUD(); return; }
   if (c.type === 'repair') { repairProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' patched ' + (c.obj.label ?? 'equipment')); return; }
