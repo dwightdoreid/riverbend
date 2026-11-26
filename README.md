@@ -2,7 +2,9 @@
 
 A browser FPS built on Three.js. A campaign of about 20 missions is planned, with optional online co-op ([docs/CAMPAIGN.md](docs/CAMPAIGN.md)).
 
-## Run it
+**Play online:** https://dwightdoreid.github.io/riverbend/ (share the link and a room code to play co-op).
+
+## Run it locally
 
 The game uses JavaScript modules, so it has to be served over HTTP. Opening the file directly won't work.
 
