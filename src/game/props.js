@@ -335,6 +335,20 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Light column: a landmark visible across the map. Style 'on' or 'off'.
+  beacon(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const color = def.color ?? 0x7fd0ff;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(.35, .9, 60, 12, 1, true), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .22, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+    beam.position.set(x, 30, z); root.add(beam);
+    const flare = box(root, x, .25, z, .5, .5, .5, emissive(color, 3));
+    return {
+      root, pos: new THREE.Vector3(x, 1, z),
+      setStyle(s) { root.visible = s !== 'off'; },
+      update(t) { beam.material.opacity = .16 + Math.sin(t * 3) * .06; flare.material.emissiveIntensity = 2 + Math.sin(t * 6) * 1; },
+    };
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -383,7 +397,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on' };
 
 export function spawnProps(defs) {
   G.props = {};

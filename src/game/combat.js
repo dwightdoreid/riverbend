@@ -237,6 +237,15 @@ export function arcBolts(points) {
   }
 }
 
+const EMP_R = 8;
+/** EMP burst visuals: an expanding blue shell and arcs (also on co-op clients). */
+export function empFx(pos) {
+  const ring = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: .35, wireframe: true }));
+  ring.position.copy(pos); G.dynRoot.add(ring); G.effects.push({ ring, life: .45, total: .45 });
+  arcBolts([pos.clone().setY(1), ...Array.from({ length: 6 }, (_, i) => pos.clone().add(new THREE.Vector3(Math.cos(i) * EMP_R * .8, .5 + Math.random() * 2, Math.sin(i) * EMP_R * .8)))]);
+  sfxAt(pos, 'arc', 1.4, 60);
+}
+
 export function stun(e, s) { if (!e.type.boss) e.stunned = Math.max(e.stunned ?? 0, s); }
 
 /** Arc hit: damage + stun the victim, then chain to the nearest machines in range. */
@@ -299,6 +308,11 @@ export function clearSmokes() {
 
 function explode(b) {
   if (b.kind === 'smoke') { makeSmoke(b.pos); fxAll({ t: 'smoke', p: b.pos.toArray().map(r2) }); b.g.removeFromParent(); return; }
+  if (b.kind === 'emp') {
+    empFx(b.pos); fxAll({ t: 'emp', p: b.pos.toArray().map(r2) });
+    for (const e of G.enemies) if (!e.dead && e.pos.distanceTo(b.pos) < EMP_R) { stun(e, 4.5); damageEnemy(e, 10, false, b.owner, { explosive: true }); }
+    alertNoise(b.pos, 20); b.g.removeFromParent(); return;
+  }
   const p = b.pos.clone(), radius = 8, lift = p.clone().add(new THREE.Vector3(0, .18, 0));
   explosionFx(p); fxAll({ t: 'boom', p: p.toArray().map(r2) });
   for (const e of G.enemies) {

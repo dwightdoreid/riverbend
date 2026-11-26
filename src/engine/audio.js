@@ -15,9 +15,14 @@ export function initAudio() {
 
 export function setVolume(v) { volume = v; if (master) master.gain.value = v; }
 
-export function sound(kind = 'shot', level = 1) {
+/** A sound panned left/right (-1..1), e.g. a beacon ping heard from one side. */
+export function soundPanned(kind, level, pan) { sound(kind, level, pan); }
+
+export function sound(kind = 'shot', level = 1, pan = 0) {
   if (!audio || !master || volume === 0) return;
-  const t = audio.currentTime, g = audio.createGain(); g.connect(master);
+  const t = audio.currentTime, g = audio.createGain();
+  if (pan && audio.createStereoPanner) { const sp = audio.createStereoPanner(); sp.pan.value = Math.max(-1, Math.min(1, pan)); g.connect(sp); sp.connect(master); }
+  else g.connect(master);
   if (kind === 'shot' || kind === 'pistol' || kind === 'blast' || kind === 'shotgun' || kind === 'dmr') {
     const n = audio.createBufferSource(); n.buffer = noiseBuffer;
     const f = audio.createBiquadFilter(); f.type = 'lowpass';

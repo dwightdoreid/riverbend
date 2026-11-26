@@ -67,22 +67,22 @@ export function reload(p) {
 
 /** kind: 'frag' (G) or 'smoke' (V, when the mission provides smoke grenades). */
 export function throwGrenade(p, kind = 'frag') {
-  const smoke = kind === 'smoke';
+  const smoke = kind === 'smoke', emp = kind === 'emp';
   if (G.status !== 'playing' || !p.alive || p.downed || p.swapLeft > 0 || p.fireDelay > .15) return;
-  if (smoke ? !p.smokes : p.grenades === 0) { if (smoke) tell(p, 'No smoke grenades.', 1.2); return; }
+  if (smoke ? !p.smokes : emp ? !p.emps : p.grenades === 0) { if (smoke || emp) tell(p, emp ? 'No EMP grenades.' : 'No smoke grenades.', 1.2); return; }
   if (p.reloadLeft > 0) p.reloadLeft = 0;
-  if (smoke) p.smokes--; else p.grenades--;
+  if (smoke) p.smokes--; else if (emp) p.emps--; else p.grenades--;
   const d = aimDirection(p), pos = eyeOf(p).addScaledVector(d, .35), vel = d.multiplyScalar(12).add(new THREE.Vector3(0, 2.7, 0));
-  if (isClient()) { if (!smoke) p.stats.grenades++; sendGrenade(pos, vel, kind); }   // the host simulates it; we see it via snapshots
-  else { if (!smoke) p.stats.grenades++; spawnBomb(pos, vel, p, kind); }
+  if (isClient()) { if (!smoke && !emp) p.stats.grenades++; sendGrenade(pos, vel, kind); }   // the host simulates it; we see it via snapshots
+  else { if (!smoke && !emp) p.stats.grenades++; spawnBomb(pos, vel, p, kind); }
   p.fireDelay = .55; p.weaponKick = .16; alertNoise(p.pos, 8);
   if (p.weapon === 'grenade' && p.grenades === 0) p.weapon = p.lastGun;
-  tell(p, smoke ? 'Smoke out.' : 'Grenade away.', 1); sfxFor(p, 'reload'); hud(p);
+  tell(p, smoke ? 'Smoke out.' : emp ? 'EMP out.' : 'Grenade away.', 1); sfxFor(p, 'reload'); hud(p);
 }
 
 /** Creates a live grenade (host/solo only). */
 export function spawnBomb(pos, vel, owner, kind = 'frag') {
-  const g = new THREE.Group(); cyl(g, 0, 0, 0, .07, .085, .18, kind === 'smoke' ? 'white' : 'green', 9); box(g, 0, .11, 0, .09, .04, .05, 'edge');
+  const g = new THREE.Group(); cyl(g, 0, 0, 0, .07, .085, .18, kind === 'smoke' ? 'white' : kind === 'emp' ? 'blue' : 'green', 9); box(g, 0, .11, 0, .09, .04, .05, 'edge');
   g.position.copy(pos); G.dynRoot.add(g);
-  G.bombs.push({ g, pos: pos.clone(), vel: vel.clone(), fuse: kind === 'smoke' ? 1.4 : 2.5, spin: Math.random() * 4 + 2, owner, kind });
+  G.bombs.push({ g, pos: pos.clone(), vel: vel.clone(), fuse: kind === 'smoke' ? 1.4 : kind === 'emp' ? 1.6 : 2.5, spin: Math.random() * 4 + 2, owner, kind });
 }

@@ -12,12 +12,12 @@ import { sound } from '../engine/audio.js';
 import { G } from '../game/state.js';
 import { createPlayer, resupplyPlayer, needsAmmo } from '../game/players.js';
 import { addEnemy } from '../game/bots.js';
-import { projectile, burst, explosionFx, alertNoise, makeSmoke, arcBolts } from '../game/combat.js';
+import { projectile, burst, explosionFx, alertNoise, makeSmoke, arcBolts, empFx } from '../game/combat.js';
 import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
 import { poseEscort } from '../game/mission.js';
 import { makeTurret, syncTurretVisuals } from '../game/turrets.js';
-import { clientMortar } from '../game/bosses.js';
+import { clientMortar, makeField } from '../game/bosses.js';
 import { lightningStrike } from '../game/weather.js';
 import { updateHUD } from '../ui/hud.js';
 import { say, feed, radio, showHit, showDamage } from '../ui/hud.js';
@@ -132,7 +132,7 @@ function onClientConnected(conn) {
       alertNoise(p.pos, 35);
       projectile(new THREE.Vector3(...m.o), new THREE.Vector3(...m.d), m.s, m.dm, p, false, false, null, m.k ?? null);
     } else if (m.t === 'nade' && p && p.alive && !p.downed) {
-      if (m.k !== 'smoke') p.stats.grenades++;
+      if (m.k !== 'smoke' && m.k !== 'emp') p.stats.grenades++;
       spawnBomb(new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), p, m.k ?? 'frag');
       alertNoise(p.pos, 8);
     } else if (m.t === 'deploy' && p && p.alive && !p.downed && p.turrets > 0) {
@@ -319,9 +319,11 @@ function applyFx(ev) {
     }
     case 'boom': explosionFx(new THREE.Vector3(...ev.p)); break;
     case 'mortar': clientMortar(ev); break;
+    case 'field': makeField(ev.p[0], ev.p[1]); break;
     case 'strike': lightningStrike(ev.p[0], ev.p[1], false); break;
     case 'arc': arcBolts(ev.pts.map(q => new THREE.Vector3(...q))); break;
     case 'smoke': makeSmoke(new THREE.Vector3(...ev.p)); break;
+    case 'emp': empFx(new THREE.Vector3(...ev.p)); break;
     case 'burst': burst(new THREE.Vector3(...ev.p), ev.c, ev.n, ev.pw); break;
     case 'say': say(ev.text, ev.time); break;
     case 'feed': feed(ev.text); break;

@@ -19,8 +19,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 199 scripted solo checks (missions 01–12 + spawn safety) in headless Chrome
-python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m12), much faster
+python3 tools/smoke_test.py                  # 211 scripted solo checks (missions 01–13 + spawn safety) in headless Chrome
+python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m13), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
@@ -85,15 +85,17 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **reinforcements**: `[[x, z]...]`, the points Spotters call Skimmers from.
 - **switching**: `{ breakers: { id: { panel, feeds } }, zones: { name: { rect } }, interlocks: [{ close, whileClosed, hint }], goal: { id: closed }, dps }`. Breakers are panel props (`style: 'on'` = closed). Closed breakers energize their zones, which hurt players and machines. Closing a breaker against an interlock causes an arc flash.
 - **weather**: `{ wind: { dir, base, gust }, lightning: { every: [min, max], radius, damage, tall: [[x, z]...] }, rain: true }`. Wind pushes grenades, smoke and moving players. Lightning strikes after a warning ring.
+- **empHud**: `true` takes the HUD aids offline (no minimap, marker or compass). The objective pings in stereo from its direction instead.
+- **emps**: EMP grenades per player (X). They stun every machine within 8 m for 4.5 s.
 - **smokes**: smoke grenades per player (V). The cloud blocks machines' line of sight.
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr`, `arc` (stuns and chains between machines) and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `train`, `turbine`, `relay`, `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `train`, `turbine`, `relay`, `beacon` (light column landmark), `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD. With `downStyle` (e.g. `'offline'`) and `upStyle`, zero health knocks the prop out instead of destroying it, and players hold E next to it to reboot it at half health.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, blockAhead, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
-- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), `tallyman`, and the bosses `warden` and `ironwalker`).
+- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `lobber` (Arc lobber: electric shells that leave damaging fields), `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), `tallyman`, and the bosses `warden` and `ironwalker`).
   - **Factions:** Tallymen belong to `halvard`; everything else is `lodestar` (override with `faction`). Machines target players and machines of the other faction, their rounds hit the other faction, and they turn on whatever shoots them. `tag` names an enemy for `kill` objectives. With `harass: propId` (or a list of ids), an enemy attacks that prop, or the nearest one still up, when no player is in sight.
 - **onStart**: events that run when play begins.
 - **triggers**: `{ id, when, do: [events], objective? }`.

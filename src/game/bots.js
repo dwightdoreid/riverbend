@@ -1,7 +1,7 @@
 // Enemy machines. Each enemy type is a model + tuning entry; the AI picks a target from all
 // living players, so the same code drives solo and co-op.
 import { THREE } from '../engine/three.js';
-import { box, cyl, rod } from '../engine/builders.js';
+import { box, cyl, rod, mesh, geo } from '../engine/builders.js';
 import { G } from './state.js';
 import { moveBlocked, los, freePoint, castSolid } from './world.js';
 import { eyeOf, isActive } from './players.js';
@@ -9,6 +9,10 @@ import { isHost, isClient, fxAll } from '../net/net.js';
 import { projectile, hurt, smokeBlocks } from './combat.js';
 import { litAt, isDown } from './props.js';
 import { walkable, findPath } from './nav.js';
+
+// Filled in by bosses.js when it loads (bosses.js imports this module, so a direct import back
+// would be circular).
+export const shellHooks = { launch: null };
 import { sfxAt } from './fx.js';
 import { feed } from '../ui/hud.js';
 
@@ -212,6 +216,26 @@ export const ENEMY_TYPES = {
       return [];
     },
   },
+  // Area denial: lobs electric shells at a target's feet that leave a damaging field for a few
+  // seconds. Keeps its distance; slow and fairly tough.
+  lobber: {
+    name: 'Arc lobber', hp: 130, color: 0x5d6a72, lob: true,
+    hover: 0, bob: .03, eyeY: 2.2, muzzle: [0, 2.6, -.2], centerY: 1.3,
+    hitParts: [{ y: 1.3, r: .8, head: false }, { y: 2.5, r: .35, head: true }],
+    speed: { patrol: .9, search: 1.4, close: 1.3, retreat: 1.6, strafe: .9 },
+    sight: { stand: 34, crouch: 26, crouchStill: 20, fov: .15 },
+    range: { far: 28, near: 12 }, strafeSwap: 2.4,
+    gun: { speed: 0, damage: 0, cooldown: [3.2, .8], spread: [0, 0], sound: 'arc' },
+    build(g, bodyMat) {
+      box(g, 0, .9, 0, 1.2, 1.1, 1.3, bodyMat); for (const s of [-1, 1]) box(g, s * .55, .3, 0, .3, .6, 1.4, 'dark');
+      cyl(g, 0, 1.75, 0, .32, .4, .7, 'edge', 10);
+      const coil = new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x3fa8ff, emissiveIntensity: 1.6 });
+      for (let k = 0; k < 4; k++) cyl(g, 0, 2.15 + k * .14, 0, .28 - k * .03, .28 - k * .03, .06, coil, 12);
+      mesh(g, geo('sphere', .3, 10, 8), coil, 0, 2.75, 0);
+      box(g, 0, 1.3, -.66, .4, .14, .04, glowEye(0x9fe0ff, 0x3fa8ff));
+      return [];
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,
@@ -355,6 +379,12 @@ function harassTarget(e) {
 export function shootAt(e, aim, dist) {
   const T = e.type, m = T.muzzle;
   const origin = e.pos.clone().add(new THREE.Vector3(m[0], m[1], m[2]).applyAxisAngle(new THREE.Vector3(0, 1, 0), e.yaw));
+  if (T.lob) {                                              // Arc lobber: an arcing shell at the target's feet
+    const spot = aim.clone().setY(0); spot.x += (Math.random() - .5) * 1.5; spot.z += (Math.random() - .5) * 1.5;
+    shellHooks.launch?.(origin, spot, 'arc', e);
+    e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
+    return;
+  }
   const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
   aim.x += (Math.random() - .5) * inaccuracy * 2; aim.y += (Math.random() - .5) * inaccuracy;
   projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null, false, false, e);

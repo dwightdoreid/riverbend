@@ -30,6 +30,7 @@ export const G = {
   shells: [],                // boss mortar shells (host)
   markers: [],               // ground warning rings
   smokes: [],                // smoke clouds (block machines' sight)
+  fields: [],                // electric fields left by Arc lobber shells
   props: {},                 // named mission props (terminals, extraction rings...)
   projectiles: [],
   bombs: [],

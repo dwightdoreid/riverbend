@@ -77,3 +77,10 @@
 #windPill{display:none;color:#c9dbe6}
 #windPill.on{display:block}
 #windArrow{display:inline-block;font-style:normal;transition:transform .2s}
+
+/* EMP storm: HUD aids offline, static over the view */
+body.emp #minimap,body.emp #mapLegend,body.emp #objectiveMarker{display:none!important}
+body.emp #compass,body.emp #threat{color:#8fa3a8;letter-spacing:6px}
+#static{position:absolute;inset:0;pointer-events:none;display:none;background:repeating-linear-gradient(0deg,#ffffff07 0 1px,transparent 1px 3px);mix-blend-mode:screen}
+body.emp #static{display:block;animation:staticFlicker .18s steps(2) infinite}
+@keyframes staticFlicker{0%{opacity:.5;transform:translateY(0)}50%{opacity:.85;transform:translateY(1px)}100%{opacity:.6;transform:translateY(-1px)}}

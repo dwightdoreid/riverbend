@@ -7,7 +7,7 @@ import { world } from '../game/world.js';
 import { WEAPONS } from '../game/weapons.js';
 import { spreadOf } from '../game/players.js';
 import { objectiveText, objectivePosFor, objectivePositions, currentObjective, inHoldZone } from '../game/mission.js';
-import { sound } from '../engine/audio.js';
+import { sound, soundPanned } from '../engine/audio.js';
 import { fxAll, isClient, inCoop } from '../net/net.js';
 import { districtAt, districtState } from '../game/blackout.js';
 import { liveAt } from '../game/switching.js';
@@ -60,7 +60,8 @@ export function updateHUD() {
   const w = WEAPONS[p.weapon], a = p.ammo[p.weapon];
   $('weaponName').textContent = w ? w.name : 'FRAG / GRENADE';
   $('ammoBig').innerHTML = w ? a.mag + ' <span>/ ' + a.reserve + '</span>' : p.grenades + ' <span>THROWABLES</span>';
-  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades + (G.mission?.turrets ? ' · TURRETS ' + (p.turrets ?? 0) : '') + (G.mission?.smokes ? ' · SMOKE ' + (p.smokes ?? 0) : '');
+  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades + (G.mission?.turrets ? ' · TURRETS ' + (p.turrets ?? 0) : '') + (G.mission?.smokes ? ' · SMOKE ' + (p.smokes ?? 0) : '') + (G.mission?.emps ? ' · EMP ' + (p.emps ?? 0) : '');
+  $('empBtn').style.display = G.mission?.emps ? '' : 'none';
   $('smokeBtn').style.display = G.mission?.smokes ? '' : 'none';
   $('turretBtn').style.display = G.mission?.turrets ? '' : 'none';
   const slots = [...p.loadout, 'grenade'], key = slots.join();
@@ -121,6 +122,22 @@ export function updateUI(dt) {
   updateRadio(dt);
   $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
   updateDownedUI(p);
+  // EMP storm: no minimap, marker, compass or threat readout. The objective pings instead,
+  // panned toward its direction and louder as you get closer.
+  const emp = !!G.mission?.empHud;
+  document.body.classList.toggle('emp', emp);
+  if (emp) {
+    const glyphs = '▒░▓∷·';
+    $('compass').textContent = Array.from({ length: 5 }, () => glyphs[Math.floor(Math.random() * glyphs.length)]).join('');
+    $('threat').textContent = 'NO SIGNAL'; $('threat').classList.remove('hot');
+    ui.pingT = (ui.pingT ?? 1) - dt;
+    const target = objectivePosFor(p);
+    if (ui.pingT <= 0 && target) {
+      const dx = target.x - p.pos.x, dz = target.z - p.pos.z, d = Math.hypot(dx, dz), rel = Math.atan2(dx, -dz) + p.yaw;
+      ui.pingT = THREE.MathUtils.clamp(d / 30, .6, 2.4);
+      soundPanned('radio', Math.max(.15, 1 - d / 90), Math.sin(rel));
+    }
+  }
   $('liveWarn').classList.toggle('on', p.alive && !p.downed && liveAt(p.pos));
   // Wind readout: arrow shows where the wind blows, relative to where you're facing.
   const wv = windVec(), ws = wv.length();

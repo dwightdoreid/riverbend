@@ -82,7 +82,7 @@ export function prepareMission(mission, checkpoint = null) {
     resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout);
     // Safety net: never start a player inside level geometry or a prop.
     if (moveBlocked(p.pos.x, p.pos.z)) { const f = freePoint(p.pos.x, p.pos.z); console.warn('Spawn ' + i + ' of ' + mission.id + ' is blocked; moved', p.pos.toArray(), '->', f.toArray()); p.pos.copy(f); }
-    p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0;
+    p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0; p.emps = mission.emps ?? 0;
   });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
   updateBlackout();
@@ -373,7 +373,7 @@ function takeCheckpoint(name = 'Checkpoint') {
     enemies: snapshotEnemies(),
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
-      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets, smokes: p.smokes,
+      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets, smokes: p.smokes, emps: p.emps,
     })),
   };
   for (const p of G.players) p.stims = 1;
@@ -399,6 +399,7 @@ function applyCheckpoint(c) {
     p.ammo = structuredClone(s.ammo); p.grenades = s.grenades; p.weapon = s.weapon; p.lastGun = s.lastGun; p.flashlight = s.flashlight;
     p.turrets = Math.max(s.turrets ?? 0, 1) * (G.mission.turrets ? 1 : 0);
     p.smokes = Math.max(s.smokes ?? 0, G.mission.smokes ? 1 : 0);
+    p.emps = Math.max(s.emps ?? 0, G.mission.emps ? 1 : 0);
   });
   restoreTurrets(c.turrets ?? []);
 }

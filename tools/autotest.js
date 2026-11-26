@@ -8,6 +8,7 @@ import { litAt, damageProp } from '../src/game/props.js';
 import { canvas, flashlight, camera } from '../src/engine/render.js';
 import { updateBlackout, districtLit } from '../src/game/blackout.js';
 import { liveAt } from '../src/game/switching.js';
+import { makeField } from '../src/game/bosses.js';
 import { addEnemy } from '../src/game/bots.js';
 import { windVec, lightningStrike } from '../src/game/weather.js';
 import { spawnBomb } from '../src/game/weapons.js';
@@ -635,6 +636,49 @@ async function mission12() {
   check('uplink complete -> mission won', S().status === 'won', S().status);
 }
 
+async function mission13() {
+  await goNext(13);
+  check('mission 13 briefing: relay ridge at night', S().status === 'briefing' && S().mission === 'm13' && G.env.dark, S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  const shown = id => getComputedStyle(document.getElementById(id)).display !== 'none';
+  check('EMP: minimap and objective marker offline, compass scrambled', document.body.classList.contains('emp') && !shown('minimap') && !shown('objectiveMarker') && !/^[NSEW]/.test(document.getElementById('compass').textContent), document.getElementById('compass').textContent);
+  check('kit beacons are lit', ['beamA', 'beamB', 'beamC'].every(id => G.props[id].style === 'on'));
+  await waitSim(Math.max(0, G.protectUntil + .3 - G.elapsed));
+
+  // Arc lobber: it lobs at the player, and the field it leaves hurts.
+  const lb = G.enemies.find(e => e.type.name === 'Arc lobber');
+  lb.pos.set(-30, 0, -18); lb.yaw = Math.PI; lb.state = 'engage'; lb.memory = 7; lb.shot = 0; teleport(-30, -2, Math.PI);   // facing the player, alerted
+  const dmg0 = G.local.stats.damage; let sawField = false;
+  for (let k = 0; k < 12 && !sawField; k++) await waitSim(.5, () => { if (G.fields.length) sawField = true; teleport(-30, -2, Math.PI); });
+  await waitSim(1.2);
+  check('Arc lobber leaves an electric field where you stood', sawField && G.local.stats.damage > dmg0, 'fields=' + G.fields.length + ' dmg=' + (G.local.stats.damage - dmg0).toFixed(0));
+  damageEnemy(lb, 999, false, G.local);
+
+  // Fields hurt the other faction, not their own.
+  teleport(40, 20);
+  const own = addEnemy({ type: 'sentry', at: [-50, 20] }), other = addEnemy({ type: 'tallyman', at: [-48, 20] });
+  own.pos.set(-50, 0, 20); other.pos.set(-49, 0, 20); own.stunned = other.stunned = 3;
+  makeField(-49.5, 20, 'lodestar'); await waitSim(.8);
+  check('fields spare their own faction', own.hp === own.maxHp && other.hp < other.maxHp, 'sentry ' + own.hp.toFixed(0) + ' tallyman ' + other.hp.toFixed(0));
+  damageEnemy(own, 999, false, G.local); damageEnemy(other, 999, false, G.local);
+
+  // EMP grenade stuns every machine around the blast.
+  const grp = [addEnemy({ type: 'sentry', at: [30, -10] }), addEnemy({ type: 'skimmer', at: [33, -10] }), addEnemy({ type: 'tallyman', at: [30, -13] })];
+  grp.forEach((e, i) => e.pos.set([30, 33, 30][i], 0, [-10, -10, -13][i]));
+  const emps0 = G.local.emps; spawnBomb(new THREE.Vector3(31, .5, -11), new THREE.Vector3(), G.local, 'emp'); await waitSim(1.9);
+  check('EMP grenade stuns machines of both factions', grp.every(e => e.stunned > 2), grp.map(e => (e.stunned ?? 0).toFixed(1)).join(','));
+  check('player has 2 EMP grenades', emps0 === 2 && /EMP 2/.test(document.getElementById('weaponInfo').textContent));
+  for (const e of grp) damageEnemy(e, 999, false, G.local);
+
+  for (const id of ['kitA', 'kitB', 'kitC']) { const k = G.props[id]; teleport(k.pos.x, k.pos.z + 1.5); await holdE(1.6); }
+  check('kit recovered -> beams off, dome beam on, checkpoint', S().objective === 1 && G.props.beamA.style === 'off' && G.props.beamDome.style === 'on' && G.checkpoint?.name === 'Kit recovered', S().objective);
+  teleport(20, 1.2); await holdE(2.8); await waitSim(.3);
+  check('transmitter keyed -> LZ beam on', S().objective === 2 && G.props.beamLZ.style === 'on', S().objective);
+  G.objState.hold = 39.8; teleport(-20, 2); await waitSim(3);
+  check('LZ held -> mission won', S().status === 'won', S().status);
+  document.body.classList.remove('emp');
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -642,7 +686,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -665,6 +709,7 @@ async function run() {
   await mission10();
   await mission11();
   await mission12();
+  await mission13();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

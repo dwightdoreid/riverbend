@@ -12,8 +12,8 @@ import { box, cyl, rod, geo, mesh } from '../engine/builders.js';
 import { G } from './state.js';
 import { los } from './world.js';
 import { eyeOf, isActive } from './players.js';
-import { ENEMY_TYPES, addEnemy, botMove, shootAt } from './bots.js';
-import { hurt, explosionFx, alertNoise } from './combat.js';
+import { ENEMY_TYPES, addEnemy, botMove, shootAt, shellHooks } from './bots.js';
+import { hurt, explosionFx, alertNoise, damageEnemy, arcBolts } from './combat.js';
 import { sfxAt } from './fx.js';
 import { feed, radio } from '../ui/hud.js';
 import { fxAll, isClient } from '../net/net.js';
@@ -268,13 +268,44 @@ function marker(x, z, life) {
   G.markers.push({ m, dot, life, total: life });
 }
 
-function launchShell(from, target) {
-  const vel = target.clone().sub(from).divideScalar(FLIGHT); vel.y = (target.y - from.y) / FLIGHT + .5 * GRAVITY * FLIGHT;
-  const mesh_ = new THREE.Mesh(geo('sphere', .22, 8, 6), shellMat); mesh_.position.copy(from); G.dynRoot.add(mesh_);
-  G.shells.push({ pos: from.clone(), vel, t: FLIGHT, mesh: mesh_, target: target.clone() });
-  marker(target.x, target.z, FLIGHT);
-  fxAll({ t: 'mortar', p: [r2(target.x), r2(target.z)], life: FLIGHT });
-  sfxAt(from, 'blast', .25, 90);
+/** kind 'mortar' explodes; kind 'arc' (Arc lobbers) leaves a damaging electric field. */
+export function launchShell(from, target, kind = 'mortar', src = null) {
+  const flight = kind === 'arc' ? 1.2 : FLIGHT;
+  const vel = target.clone().sub(from).divideScalar(flight); vel.y = (target.y - from.y) / flight + .5 * GRAVITY * flight;
+  const mesh_ = new THREE.Mesh(geo('sphere', kind === 'arc' ? .3 : .22, 8, 6), kind === 'arc' ? arcShellMat : shellMat); mesh_.position.copy(from); G.dynRoot.add(mesh_);
+  G.shells.push({ pos: from.clone(), vel, t: flight, mesh: mesh_, target: target.clone(), kind, src });
+  marker(target.x, target.z, flight);
+  fxAll({ t: 'mortar', p: [r2(target.x), r2(target.z)], life: flight });
+  sfxAt(from, kind === 'arc' ? 'arc' : 'blast', .25, 90);
+}
+const arcShellMat = new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x3fa8ff, emissiveIntensity: 2.4 });
+shellHooks.launch = launchShell;
+
+// ---------------------------------------------------------------- electric fields (Arc lobber impacts)
+
+const FIELD_R = 3.2, FIELD_LIFE = 3.2, FIELD_DPS = 22;
+const fieldMat = () => new THREE.MeshBasicMaterial({ color: 0x6fc4ff, transparent: true, opacity: .35, depthWrite: false });
+/** A crackling disc on the ground that hurts players and other-faction machines (visual on clients). */
+export function makeField(x, z, faction = 'lodestar') {
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(FIELD_R, FIELD_R, .05, 28), fieldMat()); disc.position.set(x, .14, z); G.dynRoot.add(disc);
+  G.fields.push({ x, z, life: FIELD_LIFE, disc, faction, tick: 0 });
+  arcBolts([new THREE.Vector3(x, .3, z), ...[0, 1, 2, 3].map(i => new THREE.Vector3(x + Math.cos(i * 1.6) * FIELD_R, .2, z + Math.sin(i * 1.6) * FIELD_R))]);
+}
+export function updateFields(dt) {
+  for (let i = G.fields.length - 1; i >= 0; i--) {
+    const f = G.fields[i]; f.life -= dt;
+    f.disc.material.opacity = (.22 + Math.random() * .18) * Math.min(1, f.life);
+    if (Math.random() < dt * 6) arcBolts([new THREE.Vector3(f.x, .2, f.z), new THREE.Vector3(f.x + (Math.random() - .5) * 2 * FIELD_R, .15, f.z + (Math.random() - .5) * 2 * FIELD_R)]);
+    if (!isClient()) {
+      f.tick -= dt;
+      if (f.tick <= 0) {
+        f.tick = .25;
+        for (const p of G.players) if (isActive(p) && Math.hypot(p.pos.x - f.x, p.pos.z - f.z) < FIELD_R) hurt(p, FIELD_DPS * .25, new THREE.Vector3(f.x, 0, f.z));
+        for (const e of G.enemies) if (!e.dead && e.faction !== f.faction && Math.hypot(e.pos.x - f.x, e.pos.z - f.z) < FIELD_R) damageEnemy(e, FIELD_DPS * .25, false, null, { explosive: true });
+      }
+    }
+    if (f.life <= 0) { f.disc.removeFromParent(); f.disc.material.dispose(); G.fields.splice(i, 1); }
+  }
 }
 
 /** Host: fly shells and detonate them. */
@@ -285,6 +316,7 @@ export function updateShells(dt) {
     if (s.t > 0) continue;
     s.mesh.removeFromParent(); G.shells.splice(i, 1);
     const p = s.target;
+    if (s.kind === 'arc') { makeField(p.x, p.z, s.src?.faction); fxAll({ t: 'field', p: [r2(p.x), r2(p.z)] }); sfxAt(p, 'arc', 1, 50); continue; }
     explosionFx(p.clone().setY(.4)); fxAll({ t: 'boom', p: [r2(p.x), .4, r2(p.z)] });
     for (const pl of G.players) {
       if (!isActive(pl)) continue;
@@ -309,5 +341,6 @@ export const clientMortar = ev => marker(ev.p[0], ev.p[1], ev.life);
 export function clearBossFx() {
   for (const s of G.shells ?? []) s.mesh.removeFromParent();
   for (const k of G.markers ?? []) { k.m.removeFromParent(); k.dot.removeFromParent(); }
-  G.shells = []; G.markers = [];
+  for (const f of G.fields ?? []) { f.disc.removeFromParent(); f.disc.material.dispose(); }
+  G.shells = []; G.markers = []; G.fields = [];
 }
