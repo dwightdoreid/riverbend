@@ -5,5 +5,6 @@ import calder from './calder.js';
 import portcalder from './portcalder.js';
 import tunnels from './tunnels.js';
 import kelso from './kelso.js';
+import viaduct from './viaduct.js';
 
-export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso].map(l => [l.id, l]));
+export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct].map(l => [l.id, l]));

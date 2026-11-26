@@ -440,6 +440,37 @@ async function mission08() {
   check('hold while Feeder 7 syncs -> mission won', S().status === 'won', S().status);
 }
 
+async function mission09() {
+  await click('nextBtn');
+  check('next mission -> 09 briefing', S().status === 'briefing' && S().mission === 'm09', S().mission);
+  check('elevated viaduct level', G.level.id === 'viaduct' && G.escort?.cfg.prop === 'train');
+  await click('startBtn'); godMode();
+  const train = G.props.train, E = G.escort;
+  teleport(-7.2, train.pos.z); await waitSim(1);
+  check('train stays put until section 1 is powered', E.s === 0, E.s);
+  teleport(-8.6, 60.3); await holdE(2.1);
+  check('section 1 powered', S().objective === 1 && G.props.cab1.style === 'on', S().objective);
+
+  // Ride alongside, clearing machines that close in on the train.
+  const ride = () => {
+    teleport(-7.2, train.pos.z, 0);
+    for (const e of G.enemies) if (!e.dead && Math.hypot(e.pos.x - train.pos.x, e.pos.z - train.pos.z) < 16) damageEnemy(e, 999, false, G.local);
+  };
+  G.simSteps = 10;
+  await waitSim(40, () => { ride(); if (G.objective >= 2) G.simSteps = 6; });
+  check('train reaches Market Street -> checkpoint', S().objective === 2 && G.checkpoint?.name === 'Market Street' && Math.abs(train.pos.z - 8) < .5, 'objective=' + S().objective + ' z=' + train.pos.z.toFixed(1));
+  const n0 = G.enemies.length;
+  teleport(-4, 8); G.objState.hold = 24.8; await waitSim(.6);
+  check('boarding hold done -> section 2 cut, ambush', S().objective === 3 && G.props.cab2.style === 'off' && G.enemies.length > n0, S().objective);
+  teleport(8.6, -11.8); await holdE(3.3);
+  check('section 2 reset', S().objective === 4 && G.props.cab2.style === 'on', S().objective);
+  G.simSteps = 10;
+  await waitSim(60, ride);
+  check('escort triggers fired on the way to the harbour', G.fired.has('below') && G.fired.has('harbour-gate'), [...G.fired].join(','));
+  check('train reaches Harbour Terminus -> mission won', S().status === 'won', S().status + ' z=' + train.pos.z.toFixed(1) + ' armour=' + Math.round(E.hp / E.maxHp * 100) + '%');
+  G.simSteps = 6;
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -453,6 +484,7 @@ async function run() {
   await mission06();
   await mission07();
   await mission08();
+  await mission09();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

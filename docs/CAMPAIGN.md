@@ -143,5 +143,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 06 *Brownout*: rolling blackouts, the Spotter, the DMR-14, and Juno's evidence.
      - Done: 07 *Undercurrent*: tunnels, Lineman ceiling ambushes, smoke grenades, flooded zones and a timed escape.
      - Done: 08 *Live Wire*: the switching puzzle with interlocks and arc flash, live zones that hurt machines too, and the mimic board.
-     - Next: 09 *Last Train*: power the elevated line and defend the stalled commuter train.
+     - Done: 09 *Last Train*: elevated viaduct, train escort with powered sections, station boarding hold, and the first sighting of Halvard drones.
+     - Next: 10 *Ironwalker*: the Act II finale boss, with Tallymen as a second hostile faction.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 130 scripted solo checks (missions 01–08) in headless Chrome
+python3 tools/smoke_test.py                  # 139 scripted solo checks (missions 01–09) in headless Chrome
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
@@ -64,7 +64,7 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct) and reusable pieces (kit.js).
                       Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
@@ -85,9 +85,9 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `train`, `barricade`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD.
-- **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
+- **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, blockAhead, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
 - **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), and the boss `warden`). `tag` names an enemy for `kill` objectives. With `harass: propId`, an enemy attacks that prop when no player is in sight.
 - **onStart**: events that run when play begins.

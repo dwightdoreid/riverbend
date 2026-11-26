@@ -143,7 +143,7 @@ function updateEscort(dt, o) {
   const E = G.escort, prop = G.props[E.cfg.prop], target = E.cum[Math.min(o.until, E.cum.length - 1)];
   const near = G.players.filter(isActive).filter(p => flat(p.pos, prop.pos) < (E.cfg.radius ?? 10));
   const contact = G.enemies.some(e => !e.dead && flat(e.pos, prop.pos) < (E.cfg.contactRadius ?? 9));
-  const ahead = pointAt(E.s + 4.2), blocked = G.players.some(p => isActive(p) && Math.hypot(p.pos.x - ahead.x, p.pos.z - ahead.y) < 1.9);
+  const ahead = pointAt(E.s + (E.cfg.blockAhead ?? 4.2)), blocked = G.players.some(p => isActive(p) && Math.hypot(p.pos.x - ahead.x, p.pos.z - ahead.y) < 1.9);
   E.status = !near.length ? 'waiting' : contact ? 'contact' : blocked ? 'blocked' : 'moving';
   if (E.status === 'moving') { E.s = Math.min(target, E.s + (E.cfg.speed ?? 2.4) * dt); poseEscort(); }
   if (E.s >= target - .01) completeObjective(near[0] ?? G.local);

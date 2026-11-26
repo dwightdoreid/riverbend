@@ -124,6 +124,46 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Two-car commuter train (escort vehicle). Lit windows with passengers; pose driven by escort.
+  train(parent, def) {
+    const root = new THREE.Group(); parent.add(root);
+    const g = new THREE.Group(); root.add(g);
+    const body = new THREE.MeshStandardMaterial({ color: 0xd9d4c4, roughness: .6, metalness: .2 });
+    const stripe = new THREE.MeshStandardMaterial({ color: 0x2f7a5a, roughness: .6 });
+    const win = new THREE.MeshStandardMaterial({ color: 0xf2e6c4, emissive: 0xf2d79a, emissiveIntensity: 1.1 });
+    const head = emissive(0xfff1c9, 2.2), dest = emissive(0xffb24a, 1.6);
+    for (const cz of [-4.7, 4.7]) {
+      box(g, 0, 1.95, cz, 2.9, 2.9, 9, body); box(g, 0, 3.5, cz, 2.6, .2, 8.8, 'edge');
+      box(g, 0, 1.25, cz, 2.94, .25, 9.02, stripe);
+      for (const s of [-1, 1]) {
+        box(g, s * 1.46, 2.35, cz, .04, .9, 7.6, win);
+        for (let k = -3; k <= 3; k += 1.5) box(g, s * 1.2, 2.2, cz + k, .4, .7, .4, 'dark');     // passengers
+      }
+      for (const bz of [-3, 3]) { box(g, 0, .45, cz + bz, 2.2, .5, 2.2, 'dark'); for (const s of [-1, 1]) { const wh = cyl(g, s * .75, .4, cz + bz, .38, .38, .2, 'steel', 10); wh.rotation.z = Math.PI / 2; } }
+    }
+    box(g, 0, 1.95, 0, 2.4, 2.4, .5, 'dark');                                                   // gangway
+    box(g, 0, 2.9, -9.22, 2.3, .9, .05, 'glass'); box(g, 0, 3.4, -9.22, 1.6, .26, .05, dest);   // cab + destination
+    for (const x of [-.9, .9]) box(g, x, 1.1, -9.23, .35, .2, .05, head);
+    rod(g, [0, 3.6, -6], [0, 5.5, -4.5], .05, 'steel', 6); rod(g, [-.8, 5.5, -4.5], [.8, 5.5, -4.5], .05, 'steel', 6);   // pantograph
+    g.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    const box3 = new THREE.Box3(), N = 12, halfL = 9.2;
+    const mover = addMover({ circles: Array.from({ length: N }, () => ({ x: 0, z: 0, r: 1.55 })), box: box3 });
+    const prop = {
+      root, mover, pos: new THREE.Vector3(def.at[0], 1.8, def.at[1]), yaw: def.yaw ?? 0,
+      setPose(x, z, yaw) {
+        prop.pos.set(x, 1.8, z); prop.yaw = yaw; g.position.set(x, 0, z); g.rotation.y = yaw;
+        const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+        mover.circles.forEach((c, i) => { const o = -halfL + 1 + i * (2 * halfL - 2) / (N - 1); c.x = x + fx * o; c.z = z + fz * o; });
+        const ex = Math.abs(fx) * halfL + Math.abs(fz) * 1.5, ez = Math.abs(fz) * halfL + Math.abs(fx) * 1.5;
+        box3.min.set(x - ex, 0, z - ez); box3.max.set(x + ex, 3.6, z + ez);
+      },
+      setStyle(s) { root.visible = s !== 'gone'; mover.enabled = s !== 'gone'; },
+      update(t) { dest.emissiveIntensity = 1.3 + Math.sin(t * 2) * .3; },
+    };
+    prop.setPose(def.at[0], def.at[1], prop.yaw);
+    return prop;
+  },
+
   // Jersey barriers and wreckage blocking a road. Style 'gone' clears it.
   barricade(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -272,7 +312,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle' };
 
 export function spawnProps(defs) {
   G.props = {};
