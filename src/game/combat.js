@@ -143,7 +143,7 @@ export function updateProjectiles(dt) {
       for (const e of G.enemies) {
         if (e.dead) continue;
         for (const part of e.type.hitParts) {
-          tmp.set(0, 0, part.z ?? 0).applyAxisAngle(UP, e.yaw).add(e.pos); tmp.y = part.y;
+          tmp.set(0, 0, part.z ?? 0).applyAxisAngle(UP, e.yaw).add(e.pos); tmp.y = e.elev > 1 ? e.elev - part.y : part.y + (e.elev ?? 0);   // a Lineman on the ceiling hangs upside down
           sphere.set(tmp, part.r);
           const hit = testRay.intersectSphere(sphere, new THREE.Vector3());
           if (hit) { const d = hit.distanceTo(p.pos); if (d < nearest && d <= distance) { nearest = d; victim = e; head = part.head; } }
@@ -205,12 +205,57 @@ export function explosionFx(p) {
   sfxAt(p, 'blast', 1, 85, .15);
 }
 
+// ---------------------------------------------------------------- smoke
+
+const SMOKE_LIFE = 13, SMOKE_R = 4.6;
+const smokeMat = () => new THREE.MeshStandardMaterial({ color: 0xb9c0c2, transparent: true, opacity: .0, depthWrite: false, roughness: 1 });
+
+/** Spawns a smoke cloud that blocks machines' line of sight (visual on co-op clients). */
+export function makeSmoke(pos) {
+  const puffs = [];
+  for (let i = 0; i < 9; i++) {
+    const m = new THREE.Mesh(geo('sphere', 1, 10, 8), smokeMat());
+    m.position.set(pos.x + (Math.random() - .5) * 4, .9 + Math.random() * 1.8, pos.z + (Math.random() - .5) * 4);
+    m.userData.s = 1.6 + Math.random() * 1.4; m.scale.setScalar(.3); G.dynRoot.add(m); puffs.push(m);
+  }
+  G.smokes.push({ pos: pos.clone().setY(1.4), r: SMOKE_R, life: SMOKE_LIFE, puffs });
+  sfxAt(pos, 'blast', .25, 50);
+}
+
+export function updateSmokes(dt) {
+  for (let i = G.smokes.length - 1; i >= 0; i--) {
+    const s = G.smokes[i]; s.life -= dt;
+    const age = SMOKE_LIFE - s.life, grow = Math.min(1, age / 1.2), fade = Math.min(1, s.life / 2.5);
+    for (const m of s.puffs) { m.scale.setScalar(m.userData.s * (.3 + grow * .9)); m.material.opacity = .55 * grow * fade; m.position.y += dt * .05; }
+    s.r = SMOKE_R * (.4 + grow * .6) * (.6 + .4 * fade);
+    if (s.life <= 0) { for (const m of s.puffs) { m.removeFromParent(); m.material.dispose(); } G.smokes.splice(i, 1); }
+  }
+}
+
+/** Does the segment a→b pass through dense smoke? */
+export function smokeBlocks(a, b) {
+  if (!G.smokes.length) return false;
+  const ab = b.clone().sub(a), len2 = ab.lengthSq();
+  for (const s of G.smokes) {
+    if (s.life < 1.2) continue;
+    const t = THREE.MathUtils.clamp(s.pos.clone().sub(a).dot(ab) / len2, 0, 1);
+    if (a.clone().addScaledVector(ab, t).distanceTo(s.pos) < s.r * .85) return true;
+  }
+  return false;
+}
+
+export function clearSmokes() {
+  for (const s of G.smokes ?? []) for (const m of s.puffs) { m.removeFromParent(); m.material.dispose(); }
+  G.smokes = [];
+}
+
 function explode(b) {
+  if (b.kind === 'smoke') { makeSmoke(b.pos); fxAll({ t: 'smoke', p: b.pos.toArray().map(r2) }); b.g.removeFromParent(); return; }
   const p = b.pos.clone(), radius = 8, lift = p.clone().add(new THREE.Vector3(0, .18, 0));
   explosionFx(p); fxAll({ t: 'boom', p: p.toArray().map(r2) });
   for (const e of G.enemies) {
     if (e.dead) continue;
-    const target = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0)), d = target.distanceTo(p);
+    const target = e.pos.clone().add(new THREE.Vector3(0, e.elev > 1 ? e.elev - e.type.centerY : e.type.centerY, 0)), d = target.distanceTo(p);
     if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner, { explosive: true });
   }
   for (const pl of G.players) {

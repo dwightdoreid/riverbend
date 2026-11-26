@@ -6,7 +6,7 @@ import { G } from './state.js';
 import { moveBlocked, los, freePoint, castSolid } from './world.js';
 import { eyeOf, isActive } from './players.js';
 import { isHost, isClient, fxAll } from '../net/net.js';
-import { projectile } from './combat.js';
+import { projectile, hurt, smokeBlocks } from './combat.js';
 import { litAt } from './props.js';
 import { walkable, findPath } from './nav.js';
 import { sfxAt } from './fx.js';
@@ -122,6 +122,67 @@ export const ENEMY_TYPES = {
             for (let i = 0; i < 2; i++) addEnemy({ type: 'skimmer', at: [points[0].x + i * 1.5, points[0].z], called: true }, t.pos.clone());
             feed('Spotter called in Skimmers');
           }
+        }
+      } else if (e.memory > 0) navigate(e, e.lastKnown, T.speed.search, dt);
+      else {
+        e.state = 'patrol';
+        if (e.pos.distanceTo(e.dest) < .9) e.dest.copy(e.dest.distanceTo(e.home) < 1 ? e.patrol : e.home);
+        navigate(e, e.dest, T.speed.patrol, dt);
+      }
+    },
+  },
+  // Fast melee crawler. Ceiling ambushers (def.ceiling) cling overhead until a player passes
+  // within reach below, then drop. On the ground they rush the nearest player and lunge.
+  lineman: {
+    name: 'Lineman', hp: 75, color: 0x4a3f3a,
+    hover: 0, bob: .02, eyeY: .7, muzzle: [0, .6, -.5], centerY: .55,
+    hitParts: [{ y: .55, r: .62, head: false }, { y: .62, r: .24, head: true, z: -.55 }],
+    speed: { patrol: 1.6, search: 3.4, close: 5.2, retreat: 3, strafe: 3 },
+    sight: { stand: 22, crouch: 16, crouchStill: 11, fov: .05 },
+    range: { far: 99, near: 0 }, strafeSwap: 1,
+    gun: { speed: 0, damage: 0, cooldown: [1.1, .3], spread: [0, 0], sound: 'hit' },
+    build(g, bodyMat) {
+      box(g, 0, .55, 0, .7, .32, 1.1, bodyMat); box(g, 0, .62, -.6, .42, .26, .3, 'dark');
+      for (const s of [-1, 1]) box(g, s * .1, .66, -.76, .07, .05, .02, glowEye(0xff3a2a, 0xff2010));
+      for (const z of [-.35, 0, .35]) for (const s of [-1, 1]) {
+        rod(g, [s * .3, .55, z], [s * .75, .8, z - .1], .04, 'edge', 5); rod(g, [s * .75, .8, z - .1], [s * .95, .02, z - .2], .035, 'dark', 5);
+      }
+      rod(g, [0, .7, .5], [0, 1.05, .95], .05, 'edge', 5); box(g, 0, 1.08, .98, .14, .08, .14, 'amber');   // tail with a cutting tip
+      return [];
+    },
+    pose(e) { e.g.position.y = (e.elev ?? 0) + Math.sin(G.elapsed * 9 + e.id) * .02; e.g.rotation.z = e.elev > 1 ? Math.PI : 0; },
+    update(e, dt, from) {
+      if (isClient()) return;
+      const T = e.type;
+      e.elev ??= e.def.ceiling ? 4.05 : 0;
+      if (e.dropping) { e.elev = Math.max(0, e.elev - dt * 14); if (e.elev === 0) e.dropping = false; return; }
+      if (e.elev > 0) {                                  // clinging to the ceiling
+        for (const p of G.players) if (isActive(p) && flatDist(p.pos, e.pos) < 5.5 && los(e.pos.clone().setY(3.6), eyeOf(p))) {
+          e.dropping = true; e.target = p; e.state = 'engage'; e.visible = true; e.seenAt = G.elapsed;
+          feed('Lineman dropping from the ceiling!'); sfxAt(e.pos, 'hurt', 1.2, 40);
+          break;
+        }
+        return;
+      }
+      e.sense -= dt;
+      if (e.sense <= 0) {
+        e.sense = .2;
+        let best = null, bd = Infinity;
+        for (const p of G.players) { if (!isActive(p)) continue; const d = canSee(e, from, p); if (d >= 0 && d < bd) { best = p; bd = d; } }
+        e.visible = !!best;
+        if (best) { e.target = best; e.state = 'engage'; e.memory = 6; e.seenAt = G.elapsed; e.lastKnown.copy(best.pos); }
+        else if (e.state === 'engage') { e.state = 'search'; e.memory = Math.max(e.memory, 4); }
+      }
+      const t = e.target && isActive(e.target) ? e.target : null;
+      if (e.state === 'engage' && t) {
+        const d = flatDist(e.pos, t.pos);
+        e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+        if (d > 1.3) navigate(e, t.pos, T.speed.close, dt);
+        e.yaw = Math.atan2(-(t.pos.x - e.pos.x), -(t.pos.z - e.pos.z));
+        if (d < 1.9 && e.shot <= 0 && G.elapsed > G.protectUntil + .5) {
+          e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
+          hurt(t, 18, e.pos.clone());
+          sfxAt(e.pos, 'hit', .9, 30);
         }
       } else if (e.memory > 0) navigate(e, e.lastKnown, T.speed.search, dt);
       else {
@@ -277,7 +338,7 @@ function canSee(e, from, p) {
   if (dist >= reach) return -1;
   const dir = to.clone().sub(from).normalize(), forward = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw));
   const aware = e.state === 'engage' || e.memory > 0 || (p.flashlight && G.env.dark) || dir.dot(forward) > t.fov;
-  return aware && los(from, to) ? dist : -1;
+  return aware && los(from, to) && !smokeBlocks(from, to) ? dist : -1;
 }
 
 const CONE_COLORS = { patrol: 0xf3a55a, investigate: 0xf3d35a, search: 0xf3d35a, engage: 0xff5a3a };

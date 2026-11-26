@@ -6,7 +6,7 @@ import { G } from './game/state.js';
 import { createPlayer, updatePlayer } from './game/players.js';
 import { WEAPONS } from './game/weapons.js';
 import { updateBots, poseEnemy } from './game/bots.js';
-import { updateProjectiles, updateBombs, updateEffects, updateDowned } from './game/combat.js';
+import { updateProjectiles, updateBombs, updateEffects, updateDowned, updateSmokes } from './game/combat.js';
 import { updateInteract, updateObjective, updateScripts, checkTriggers, objectiveTargets } from './game/mission.js';
 import { updateProps } from './game/props.js';
 import { pause, selectMission } from './game/flow.js';
@@ -54,6 +54,7 @@ function step(dt) {
   updateBots(dt);
   updateTurrets(dt);
   updateBlackout();
+  updateSmokes(dt);
   updateShells(dt);
   updateMarkers(dt);
   updateProjectiles(dt);
@@ -76,6 +77,7 @@ function clientStep(dt) {
   updateEffects(dt);
   updateMarkers(dt);
   updateBlackout();
+  updateSmokes(dt);
 }
 
 let last = performance.now();

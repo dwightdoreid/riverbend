@@ -58,7 +58,8 @@ export function updateHUD() {
   const w = WEAPONS[p.weapon], a = p.ammo[p.weapon];
   $('weaponName').textContent = w ? w.name : 'FRAG / GRENADE';
   $('ammoBig').innerHTML = w ? a.mag + ' <span>/ ' + a.reserve + '</span>' : p.grenades + ' <span>THROWABLES</span>';
-  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades + (G.mission?.turrets ? ' · TURRETS ' + (p.turrets ?? 0) : '');
+  $('weaponInfo').textContent = (w ? w.mode : 'TIMED FUSE') + ' · GRENADES ' + p.grenades + (G.mission?.turrets ? ' · TURRETS ' + (p.turrets ?? 0) : '') + (G.mission?.smokes ? ' · SMOKE ' + (p.smokes ?? 0) : '');
+  $('smokeBtn').style.display = G.mission?.smokes ? '' : 'none';
   $('turretBtn').style.display = G.mission?.turrets ? '' : 'none';
   const slots = [...p.loadout, 'grenade'], key = slots.join();
   if (ui.slotKey !== key) {
@@ -168,8 +169,10 @@ export function drawMap() {
   mc.clearRect(0, 0, MW, MH); mc.fillStyle = '#172d35'; mc.fillRect(0, 0, MW, MH);
   const [[ox0, oz0], [ox1, oz1]] = map.outline;
   mc.strokeStyle = '#607a7d'; mc.lineWidth = 1; mc.strokeRect(mx(ox0), mz(oz0), mx(ox1) - mx(ox0), mz(oz1) - mz(oz0));
+  // Levels can describe walkable areas as rectangles (tunnels); draw those as the "floor".
+  if (map.rects) { mc.fillStyle = '#2c4a52'; for (const [x0, z0, x1, z1] of map.rects) mc.fillRect(mx(x0), mz(z0), mx(x1) - mx(x0), mz(z1) - mz(z0)); }
   mc.fillStyle = '#435852';
-  for (const b of world.solids) if ((b.max.x - b.min.x) > 2 && (b.max.z - b.min.z) > 1) mc.fillRect(mx(b.min.x), mz(b.min.z), mx(b.max.x) - mx(b.min.x), mz(b.max.z) - mz(b.min.z));
+  if (!map.rects) for (const b of world.solids) if ((b.max.x - b.min.x) > 2 && (b.max.z - b.min.z) > 1) mc.fillRect(mx(b.min.x), mz(b.min.z), mx(b.max.x) - mx(b.min.x), mz(b.max.z) - mz(b.min.z));
   mc.strokeStyle = '#6b8178'; mc.lineWidth = map.lineWidth ?? 1;
   for (const [x0, z0, x1, z1] of map.lines ?? []) { mc.beginPath(); mc.moveTo(mx(x0), mz(z0)); mc.lineTo(mx(x1), mz(z1)); mc.stroke(); }
   for (const op of objectivePositions()) {

@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 105 scripted solo checks (missions 01–06) in headless Chrome
+python3 tools/smoke_test.py                  # 119 scripted solo checks (missions 01–07) in headless Chrome
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
 ```
@@ -63,7 +63,8 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels) and reusable pieces (kit.js).
+                      Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
 tools/                smoke_test.py (solo), coop_test.py (two-browser co-op)
@@ -75,17 +76,18 @@ substation_fps.html   the original single-file version, kept for reference
 Missions are plain data. Copy a file in `src/missions/`, change its contents, then add it to `CAMPAIGN` in `src/missions/index.js`. Mission 02, `m02_lights_out.js`, uses most of the features listed below.
 
 **Mission-level fields**
-- **level**: an id from `src/levels/index.js`. **environment**: `day`, `dusk`, `night` or `storm` (`ENV_PRESETS` in `engine/render.js`).
+- **level**: an id from `src/levels/index.js`. **environment**: `day`, `dusk`, `night`, `storm` or `underground` (`ENV_PRESETS` in `engine/render.js`).
 - **blackout**: `{ period, litFraction, offsets: { districtId: seconds } }` runs rolling blackouts on levels that define districts (Port Calder). Lit districts expose players; dark ones hide them.
 - **reinforcements**: `[[x, z]...]`, the points Spotters call Skimmers from.
+- **smokes**: smoke grenades per player (V). The cloud blocks machines' line of sight.
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr` and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade`, `door` (`open` clears it), `drive`, `payphone` and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `truck`, `barricade`, `door` (`open` clears it), `drive`, `payphone`, `cable` and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
-- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, and the boss `warden`). `tag` names an enemy for `kill` objectives. With `harass: propId`, an enemy attacks that prop when no player is in sight.
+- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), and the boss `warden`). `tag` names an enemy for `kill` objectives. With `harass: propId`, an enemy attacks that prop when no player is in sight.
 - **onStart**: events that run when play begins.
 - **triggers**: `{ id, when, do: [events], objective? }`.
 
@@ -99,6 +101,7 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - `survive`: last `time` seconds anywhere. With `guard: [propIds]`, the objective box shows those props' health.
 - `escort`: drive the mission's escort vehicle up to waypoint `until`. It moves only while a player is within `radius` and no machine is within `contactRadius`.
 - Any objective can set `reach` to change the interact distance (default 2.6 m).
+- Any objective can set `timeLimit` (seconds) with `onTimeout` events (default: fail). The countdown shows in the objective box.
 
 Each objective can have `onStart` and `onComplete` events.
 

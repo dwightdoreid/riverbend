@@ -2,6 +2,7 @@
 // A player is driven by its `input` struct: the local browser fills it from keyboard/touch,
 // and in co-op the host fills remote players' structs from network messages.
 import { THREE } from '../engine/three.js';
+import { G } from './state.js';
 import { moveBlocked, moverBlocked } from './world.js';
 import { WEAPONS, DEFAULT_LOADOUT, fire } from './weapons.js';
 import { alertNoise } from './combat.js';
@@ -67,7 +68,12 @@ export function updatePlayer(p, dt) {
   const { forward, side } = p.input, moving = forward !== 0 || side !== 0;
   p.sprinting = moving && forward > 0 && p.input.sprint && !p.crouched && !p.aiming && p.stamina > 2 && p.reloadLeft <= 0;
   p.moving = moving ? 1 : 0;
-  const speed = p.sprinting ? 6.6 : p.crouched ? 2.1 : p.aiming ? 2.7 : 4.2;
+  // Wading through a level's water zones: slower, no sprint, and the splashing is loud.
+  const wet = inWater(p.pos);
+  if (wet) p.sprinting = false;
+  const speed = (p.sprinting ? 6.6 : p.crouched ? 2.1 : p.aiming ? 2.7 : 4.2) * (wet ? .55 : 1);
+  p.splash = Math.max(0, (p.splash ?? 0) - dt);
+  if (wet && moving && p.splash === 0) { p.splash = .55; alertNoise(p.pos, p.crouched ? 7 : 12); if (p.local) sfxFor(p, 'reload', .35); }
   if (moving) {
     const len = Math.hypot(forward, side), f = forward / len, s = side / len;
     const dx = (-Math.sin(p.yaw) * f + Math.cos(p.yaw) * s) * speed * dt, dz = (-Math.cos(p.yaw) * f - Math.sin(p.yaw) * s) * speed * dt;
@@ -103,4 +109,10 @@ export function resupplyPlayer(p) {
 }
 export function needsAmmo(p) {
   return p.loadout.some(k => p.ammo[k].reserve < WEAPONS[k].reserveMax) || p.grenades < MAX_GRENADES;
+}
+
+/** Is this position inside one of the level's water zones? */
+export function inWater(pos) {
+  for (const z of G.level?.zones ?? []) if (z.type === 'water' && pos.x >= z.rect[0] && pos.x < z.rect[2] && pos.z >= z.rect[1] && pos.z < z.rect[3]) return true;
+  return false;
 }

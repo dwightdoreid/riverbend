@@ -121,6 +121,7 @@ export function setupInput() {
     else if (k === 'q') p.aiming = !p.aiming;
     else if (k === 'f') toggleLight();
     else if (k === 't') deployTurret(p);
+    else if (k === 'v') throwGrenade(p, 'smoke');
   });
   document.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   window.addEventListener('blur', () => { keys.clear(); if (me()) me().input.trigger = me().input.semi = false; if (playing()) pause(); });
@@ -135,6 +136,7 @@ export function setupInput() {
   $('crouchBtn').onclick = () => { if (playing()) toggleCrouch(); };
   $('lightBtn').onclick = () => { if (playing()) toggleLight(); };
   $('turretBtn').onclick = () => { if (playing()) deployTurret(me()); };
+  $('smokeBtn').onclick = () => { if (playing()) throwGrenade(me(), 'smoke'); };
   $('reloadBtn').onclick = () => reload(me());
   $('grenadeBtn').onclick = () => throwGrenade(me());
   $('weapons').onclick = e => { const b = e.target.closest('[data-weapon]'); if (b && playing()) switchWeapon(me(), b.dataset.weapon); };

@@ -14,7 +14,7 @@ import { clearBossFx } from './bosses.js';
 import { resetBlackout, updateBlackout } from './blackout.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
-import { alertNoise, clearCombat, revive } from './combat.js';
+import { alertNoise, clearCombat, revive, clearSmokes } from './combat.js';
 import { fxAll, fxTo, onCheckpoint } from '../net/net.js';
 import { sfxFor, tell } from './fx.js';
 import { say, feed, radio, clearRadio, updateHUD } from '../ui/hud.js';
@@ -63,7 +63,7 @@ export function prepareMission(mission, checkpoint = null) {
   loadLevel(level);
   G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}) };
   applyEnvironment(G.env);
-  clearCombat(); clearRadio(); clearTurrets(); clearBossFx(); resetBlackout();
+  clearCombat(); clearRadio(); clearTurrets(); clearBossFx(); resetBlackout(); clearSmokes();
   if (G.dynRoot) G.dynRoot.removeFromParent();
   G.dynRoot = new THREE.Group(); scene.add(G.dynRoot);
   clearMovers();
@@ -74,7 +74,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupEscort(mission.escort);
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
-  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; });
+  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0; });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
   updateBlackout();
   updateHUD();
@@ -151,7 +151,7 @@ const ESCORT_STATUS = { waiting: 'stopped · stay close', contact: 'stopped · m
 
 // ---------------------------------------------------------------- objectives
 
-const freshObjState = () => ({ collected: new Set(), hold: 0 });
+const freshObjState = () => ({ collected: new Set(), hold: 0, t: 0 });
 export const currentObjective = () => G.mission?.objectives[G.objective] ?? null;
 
 const posOf = ref => typeof ref === 'string' ? G.props[ref].pos : new THREE.Vector3(ref[0], 1, ref[1]);
@@ -184,6 +184,10 @@ export function objectiveText() {
   if (o.type === 'survive') {
     const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
     sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
+  }
+  if (o.timeLimit) {
+    const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
+    sub = '⏱ ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + (sub ? ' · ' + sub : '');
   }
   if (o.guard) sub += ' · ' + o.guard.map(id => {
     const p = G.props[id];
@@ -229,6 +233,11 @@ function collectTarget(p, id) {
 /** Per-step progress for objectives that aren't hold-to-interact. */
 export function updateObjective(dt) {
   const o = currentObjective(); if (!o) return;
+  // Optional time limit on any objective (e.g. escape before the tunnels seal).
+  if (o.timeLimit) {
+    G.objState.t += dt;
+    if (G.objState.t >= o.timeLimit && !G.objState.timedOut) { G.objState.timedOut = true; runEvents(o.onTimeout ?? [{ do: 'fail' }]); if (G.status !== 'playing') return; }
+  }
   const alive = G.players.filter(isActive);
   if (o.type === 'reach') {
     const p = alive.find(q => flat(q.pos, posOf(o.target)) < (o.radius ?? 3));
@@ -333,7 +342,7 @@ export function checkTriggers() {
 function takeCheckpoint(name = 'Checkpoint') {
   G.checkpoint = {
     name, objective: G.objective, startRan: G.objStartRan, elapsed: G.elapsed,
-    objState: { collected: [...G.objState.collected], hold: G.objState.hold },
+    objState: { collected: [...G.objState.collected], hold: G.objState.hold, t: G.objState.t },
     fired: [...G.fired],
     props: Object.fromEntries(Object.values(G.props).map(p => [p.id, p.style])),
     pickups: G.pickups.map(k => k.used),
@@ -343,7 +352,7 @@ function takeCheckpoint(name = 'Checkpoint') {
     enemies: snapshotEnemies(),
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
-      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets,
+      grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets, smokes: p.smokes,
     })),
   };
   for (const p of G.players) p.stims = 1;
@@ -355,7 +364,7 @@ function takeCheckpoint(name = 'Checkpoint') {
 function applyCheckpoint(c) {
   G.checkpoint = c;
   G.objective = c.objective; G.objStartRan = c.startRan; G.missionStartRan = true;
-  G.objState = { collected: new Set(c.objState.collected), hold: c.objState.hold };
+  G.objState = { collected: new Set(c.objState.collected), hold: c.objState.hold, t: c.objState.t ?? 0 };
   G.fired = new Set(c.fired);
   G.elapsed = c.elapsed; G.protectUntil = c.elapsed + SPAWN_PROTECTION;
   for (const [id, style] of Object.entries(c.props)) G.props[id]?.setStyle(style);
@@ -368,6 +377,7 @@ function applyCheckpoint(c) {
     p.pos.set(s.pos[0], 0, s.pos[1]); p.yaw = s.yaw; p.health = Math.max(s.health, 60);
     p.ammo = structuredClone(s.ammo); p.grenades = s.grenades; p.weapon = s.weapon; p.lastGun = s.lastGun; p.flashlight = s.flashlight;
     p.turrets = Math.max(s.turrets ?? 0, 1) * (G.mission.turrets ? 1 : 0);
+    p.smokes = Math.max(s.smokes ?? 0, G.mission.smokes ? 1 : 0);
   });
   restoreTurrets(c.turrets ?? []);
 }

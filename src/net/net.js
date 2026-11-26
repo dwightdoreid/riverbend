@@ -12,7 +12,7 @@ import { sound } from '../engine/audio.js';
 import { G } from '../game/state.js';
 import { createPlayer, resupplyPlayer, needsAmmo } from '../game/players.js';
 import { addEnemy } from '../game/bots.js';
-import { projectile, burst, explosionFx, alertNoise } from '../game/combat.js';
+import { projectile, burst, explosionFx, alertNoise, makeSmoke } from '../game/combat.js';
 import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
 import { poseEscort } from '../game/mission.js';
@@ -131,8 +131,8 @@ function onClientConnected(conn) {
       alertNoise(p.pos, 35);
       projectile(new THREE.Vector3(...m.o), new THREE.Vector3(...m.d), m.s, m.dm, p);
     } else if (m.t === 'nade' && p && p.alive && !p.downed) {
-      p.stats.grenades++;
-      spawnBomb(new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), p);
+      if (m.k !== 'smoke') p.stats.grenades++;
+      spawnBomb(new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), p, m.k ?? 'frag');
       alertNoise(p.pos, 8);
     } else if (m.t === 'deploy' && p && p.alive && !p.downed && p.turrets > 0) {
       p.turrets--; makeTurret({ owner: p, x: m.x, z: m.z, yaw: m.y }); feed(p.name + ' deployed a turret');
@@ -217,7 +217,7 @@ const STATES = ['patrol', 'investigate', 'search', 'engage'];
 
 function snapshot() {
   return {
-    t: 'snap', e: r2(G.elapsed), o: G.objective, c: [...G.objState.collected], h: r2(G.objState.hold),
+    t: 'snap', e: r2(G.elapsed), o: G.objective, c: [...G.objState.collected], h: r2(G.objState.hold), ot: r2(G.objState.t),
     ps: Object.fromEntries(Object.values(G.props).map(p => [p.id, p.style])),
     pu: G.pickups.map(k => (k.used ? 1 : 0)).join(''),
     pl: G.players.map(p => {
@@ -229,7 +229,7 @@ function snapshot() {
         p.interaction ? [p.interaction.name, r2(p.interactTime / p.interaction.time)] : 0,
         reviver ? r2(reviver.interactTime / reviver.interaction.time) : 0];
     }),
-    en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2) | (e.exposed ? 16 : 0)]),
+    en: G.enemies.map(e => [r2(e.pos.x), r2(e.pos.z), r2(e.yaw), Math.ceil(e.hp), (e.dead ? 1 : 0) | (e.visible ? 2 : 0) | (STATE_CODE[e.state] << 2) | (e.exposed ? 16 : 0), r2(e.elev ?? 0)]),
     bo: G.bombs.map(b => [r2(b.pos.x), r2(b.pos.y), r2(b.pos.z)]),
     es: G.escort ? [r2(G.escort.s), Math.ceil(G.escort.hp), G.escort.status] : null,
     tu: G.turrets.filter(t => !t.dead).map(t => [t.id, r2(t.pos.x), r2(t.pos.z), r2(t.yaw), t.ammo]),
@@ -275,7 +275,7 @@ function applySnapshot(s) {
   if (G.status === 'briefing' || !G.mission) return;
   G.elapsed = s.e;
   if (s.o !== G.objective) { G.objective = s.o; G.objStartRan = true; }
-  G.objState.collected = new Set(s.c); G.objState.hold = s.h;
+  G.objState.collected = new Set(s.c); G.objState.hold = s.h; G.objState.t = s.ot ?? 0;
   for (const [id, style] of Object.entries(s.ps)) if (G.props[id] && G.props[id].style !== style) G.props[id].setStyle(style);
   [...s.pu].forEach((u, i) => { const k = G.pickups[i]; if (k) { k.used = u === '1'; k.g.visible = !k.used; } });
   for (const row of s.pl) {
@@ -290,8 +290,9 @@ function applySnapshot(s) {
       p.crouched = !!(f & 4); p.flashlight = !!(f & 8); p.aiming = !!(f & 16); p.moving = f & 32 ? 1 : 0; p.weapon = weapon;
     }
   }
-  s.en.forEach(([x, z, yaw, hp, f], i) => {
+  s.en.forEach(([x, z, yaw, hp, f, elev], i) => {
     const e = G.enemies[i]; if (!e) return;
+    e.elev = elev;
     (e.netPos ??= new THREE.Vector3()).set(x, 0, z); e.netYaw = yaw; e.hp = hp;
     const dead = !!(f & 1);
     if (dead && !e.dead) e.g.visible = false;
@@ -317,6 +318,7 @@ function applyFx(ev) {
     }
     case 'boom': explosionFx(new THREE.Vector3(...ev.p)); break;
     case 'mortar': clientMortar(ev); break;
+    case 'smoke': makeSmoke(new THREE.Vector3(...ev.p)); break;
     case 'burst': burst(new THREE.Vector3(...ev.p), ev.c, ev.n, ev.pw); break;
     case 'say': say(ev.text, ev.time); break;
     case 'feed': feed(ev.text); break;
@@ -371,7 +373,7 @@ export function netTick(dt) {
 
 /** Client: ask the host to fire a shot / throw a grenade. */
 export function sendShot(o, d, s, dm) { net.hostConn?.send({ t: 'shot', o: o.toArray().map(r2), d: d.toArray().map(v => Math.round(v * 1e4) / 1e4), s, dm }); }
-export function sendGrenade(pos, vel) { net.hostConn?.send({ t: 'nade', p: pos.toArray().map(r2), v: vel.toArray().map(r2) }); }
+export function sendGrenade(pos, vel, kind = 'frag') { net.hostConn?.send({ t: 'nade', p: pos.toArray().map(r2), v: vel.toArray().map(r2), k: kind }); }
 
 
 /** Client: ask the host to place a turret. */

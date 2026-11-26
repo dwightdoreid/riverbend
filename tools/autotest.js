@@ -3,7 +3,7 @@
 // into <pre id="autotest-result"> and document.title, for tools/smoke_test.py to read.
 import { THREE } from '../src/engine/three.js';
 import { G } from '../src/game/state.js';
-import { hurt, projectile, damageEnemy } from '../src/game/combat.js';
+import { hurt, projectile, damageEnemy, smokeBlocks } from '../src/game/combat.js';
 import { litAt, damageProp } from '../src/game/props.js';
 import { canvas, flashlight, camera } from '../src/engine/render.js';
 import { updateBlackout, districtLit } from '../src/game/blackout.js';
@@ -358,6 +358,52 @@ async function mission06() {
   check('hold the depot -> mission won', S().status === 'won', S().status);
 }
 
+async function mission07() {
+  await click('nextBtn');
+  check('next mission -> 07 briefing', S().status === 'briefing' && S().mission === 'm07', S().mission);
+  check('tunnel level, underground lighting', G.level.id === 'tunnels' && G.env.dark && G.env.sun.intensity === 0);
+  await click('startBtn'); godMode(); await waitSim(.3);
+  check('loadout: shotgun first, 2 smoke grenades', S().weapon === 'shotgun' && G.local.smokes === 2 && /SMOKE 2/.test(document.getElementById('weaponInfo').textContent), document.getElementById('weaponInfo').textContent);
+
+  // A Lineman on the ceiling can be shot where it hangs.
+  const hanging = G.enemies.find(e => e.def.ceiling && Math.hypot(e.home.x - 5, e.home.z - 15) < 2);
+  const target = hanging.pos.clone().setY(hanging.elev - .55), from = new THREE.Vector3(hanging.pos.x - 2.5, 1.7, hanging.pos.z);
+  let hp = hanging.hp; projectile(from, target.clone().sub(from).normalize(), 240, 20, G.local); await frames(3);
+  check('bullets hit a Lineman on the ceiling', hanging.elev > 3 && hanging.hp < hp, 'elev=' + hanging.elev + ' hp ' + hp + '->' + hanging.hp);
+
+  // Ceiling ambush: walk under one and it drops and attacks.
+  const amb = G.enemies.find(e => e.def.ceiling && Math.hypot(e.home.x + 31, e.home.z - 8) < 2);
+  const dmg0 = G.local.stats.damage;
+  teleport(amb.pos.x, amb.pos.z + 2.5); await waitSim(2.5, () => teleport(amb.pos.x, amb.pos.z + 1.2));
+  check('Lineman drops from the ceiling and attacks', amb.elev === 0 && G.local.stats.damage > dmg0, 'elev=' + amb.elev + ' dmg=' + (G.local.stats.damage - dmg0));
+  damageEnemy(amb, 999, false, G.local);
+
+  // Smoke: a cloud between two points blocks machines' line of sight.
+  teleport(-31, 18, 0); G.local.pitch = 0; await tap('v'); await waitSim(2.6);
+  const cloud = G.smokes[0];
+  check('smoke grenade makes a cloud', G.smokes.length === 1 && G.local.smokes === 1, 'clouds=' + G.smokes.length);
+  check('smoke blocks sight through it', !!cloud && smokeBlocks(cloud.pos.clone().add(new THREE.Vector3(0, 0, 8)), cloud.pos.clone().add(new THREE.Vector3(0, 0, -8))));
+
+  // Water: wading is slow.
+  teleport(16, -1, Math.PI / 2); const x0 = G.local.pos.x, t0 = G.elapsed;
+  key('keydown', 'w'); await waitSim(.5); key('keyup', 'w');
+  const rate = Math.abs(G.local.pos.x - x0) / (G.elapsed - t0);
+  check('wading through the flood is slow', rate > 1.5 && rate < 2.8, rate.toFixed(2) + ' m/s (dry: 4.2)');
+
+  for (const [x, z] of [[-21, 10.4], [13, 17], [-15.5, -23]]) { teleport(x, z); await holdE(2.6); }
+  check('three feeders cut -> checkpoint', S().objective === 1 && G.checkpoint?.name === 'Feeders cut' && G.props.cableA.style === 'cut', S().objective + ' ' + G.checkpoint?.name);
+  teleport(19.5, -19); await holdE(3.3); await waitSim(.5);
+  check('interconnector tripped -> door opens + checkpoint', S().objective === 2 && G.props.vaultEast.style === 'open' && G.checkpoint?.name === 'Interconnector down', S().objective);
+  check('escape timer shown', /⏱ 1:1\d/.test(document.getElementById('objectiveSub').textContent), document.getElementById('objectiveSub').textContent);
+
+  G.objState.t = 74.6; await waitSim(2.5);
+  check('timer runs out -> sealed in (fail)', S().status === 'lost', S().status);
+  await click('retryBtn'); godMode();
+  check('retry restarts the escape with a fresh timer', S().status === 'playing' && S().objective === 2 && G.objState.t < 3, 't=' + G.objState.t.toFixed(1));
+  teleport(31.5, -36); await waitSim(3);
+  check('reach exit shaft -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -369,6 +415,7 @@ async function run() {
   await mission04();
   await mission05();
   await mission06();
+  await mission07();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

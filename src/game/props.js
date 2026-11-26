@@ -192,6 +192,21 @@ const PROP_TYPES = {
     };
   },
 
+  // Halvard cable junction: a cabinet with glowing feeder cables. Style 'cut' kills the glow.
+  cable(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const glowOn = emissive(0x7fd4ff, 1.8), dead = new THREE.MeshStandardMaterial({ color: 0x23282b, roughness: .9 });
+    box(root, x, 1.1, z, 1.4, 2.2, .8, 'edge'); box(root, x, 1.6, z - .41, 1.1, .5, .04, 'dark');
+    const cables = [];
+    for (const dx of [-.4, 0, .4]) cables.push(rod(root, [x + dx, 2.2, z], [x + dx, 4.4, z + .3], .09, glowOn, 6));
+    const lamp = box(root, x + .45, 2, z - .42, .12, .12, .03, emissive(0x5ce08a, 1.6));
+    return {
+      root, pos: new THREE.Vector3(x, 1.3, z),
+      setStyle(s) { const cut = s === 'cut'; for (const c of cables) c.material = cut ? dead : glowOn; lamp.material = cut ? dead : lamp.material; },
+      update(t, i) { glowOn.emissiveIntensity = 1.4 + Math.sin(t * 7 + i) * .5; },
+    };
+  },
+
   // Invisible point used as an objective target (reach / hold objectives).
   marker(parent, def) {
     const root = new THREE.Group(); parent.add(root);
@@ -225,7 +240,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live' };
 
 export function spawnProps(defs) {
   G.props = {};
