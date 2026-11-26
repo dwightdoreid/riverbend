@@ -36,7 +36,7 @@ export default {
   },
   failure: { eyebrow: 'Mission incomplete / retry available', title: 'SEALED<br><span>IN.</span>', text: 'Clear tunnels before walking under them, keep smoke for the vault, and don\'t stop on the way out.' },
 
-  spawns: [[-34, 35, 0], [-32, 35, 0], [-34, 33, 0], [-32, 33, 0]],
+  spawns: [[-36, 35, 0], [-36, 32.5, 0], [-30, 36.5, 0], [-30, 31.5, 0]],   // clear of the crate in the entry room
 
   props: [
     { id: 'cableA', type: 'cable', at: [-21, 8] },

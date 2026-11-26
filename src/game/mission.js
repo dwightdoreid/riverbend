@@ -5,7 +5,7 @@ import { THREE } from '../engine/three.js';
 import { scene, applyEnvironment, ENV_PRESETS } from '../engine/render.js';
 import { sound } from '../engine/audio.js';
 import { G } from './state.js';
-import { clearWorld, clearMovers } from './world.js';
+import { clearWorld, clearMovers, moveBlocked, freePoint } from './world.js';
 import { buildNav } from './nav.js';
 import { LEVELS } from '../levels/index.js';
 import { spawnProps, spawnPickups, repairProp } from './props.js';
@@ -13,6 +13,7 @@ import { clearTurrets, snapshotTurrets, restoreTurrets } from './turrets.js';
 import { clearBossFx } from './bosses.js';
 import { resetBlackout, updateBlackout } from './blackout.js';
 import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './switching.js';
+import { setupWeather } from './weather.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
 import { alertNoise, clearCombat, revive, clearSmokes } from './combat.js';
@@ -74,9 +75,15 @@ export function prepareMission(mission, checkpoint = null) {
   spawnProps(mission.props);
   setupEscort(mission.escort);
   setupSwitching();
+  setupWeather();
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
-  G.players.forEach((p, i) => { resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout); p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0; });
+  G.players.forEach((p, i) => {
+    resetPlayer(p, mission.spawns[i % mission.spawns.length], mission.loadout);
+    // Safety net: never start a player inside level geometry or a prop.
+    if (moveBlocked(p.pos.x, p.pos.z)) { const f = freePoint(p.pos.x, p.pos.z); console.warn('Spawn ' + i + ' of ' + mission.id + ' is blocked; moved', p.pos.toArray(), '->', f.toArray()); p.pos.copy(f); }
+    p.flashlight = false; p.turrets = mission.turrets ?? 0; p.smokes = mission.smokes ?? 0;
+  });
   if (checkpoint) applyCheckpoint(checkpoint); else G.checkpoint = null;
   updateBlackout();
   updateHUD();

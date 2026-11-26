@@ -151,7 +151,7 @@ def main():
             print(('PASS ' if item['ok'] else 'FAIL ') + item['name'] + (f"  ({item['detail']})" if item.get('detail') not in ('', None) else ''))
         if report.get('crash'):
             print('CRASH:', report['crash'])
-        ok = chord_fire_check(cdp)
+        ok = chord_fire_check(cdp) if 'only=' not in extra else True
         report['passed'] = report.get('passed') and ok
         print('draw calls:', report.get('drawCalls'))
         if '--screenshot' in sys.argv:

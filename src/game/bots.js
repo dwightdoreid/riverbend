@@ -383,6 +383,8 @@ export function updateBots(dt) {
     e.shot -= dt; e.memory = Math.max(0, e.memory - dt);
     e.mat.emissive.setHex(e.flash > 0 ? 0x9c532c : 0x000000);
     if (e.target && !isTargetAlive(e.target)) { e.target = null; e.visible = false; }
+    // Stunned by the arc carbine: frozen, flickering blue.
+    if (e.stunned > 0) { e.stunned -= dt; e.mat.emissive.setHex(Math.random() < .5 ? 0x2f6fd0 : 0x000000); e.shot = Math.max(e.shot, .3); poseEnemy(e, dt); continue; }
     const from = e.pos.clone().add(new THREE.Vector3(0, T.eyeY, 0));
     if (T.update) { T.update(e, dt, from); poseEnemy(e, dt); continue; }   // bosses run their own logic
 

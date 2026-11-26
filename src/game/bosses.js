@@ -259,6 +259,8 @@ const FLIGHT = 1.5, GRAVITY = 12, BLAST = 4.5;
 const ringMat = new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: .55, depthWrite: false });
 const shellMat = new THREE.MeshStandardMaterial({ color: 0x2b2f31, emissive: 0xff6a1a, emissiveIntensity: .8 });
 
+/** A red warning ring on the ground that fills in over `life` seconds (mortars, lightning). */
+export function warnRing(x, z, life) { marker(x, z, life); }
 function marker(x, z, life) {
   const m = new THREE.Mesh(geo('torus', BLAST, .09, 6, 40), ringMat); m.rotation.x = Math.PI / 2; m.position.set(x, .2, z);
   const dot = new THREE.Mesh(geo('cyl', .5, .5, .05, 16), ringMat); dot.position.set(x, .18, z);

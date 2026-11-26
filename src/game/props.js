@@ -279,6 +279,33 @@ const PROP_TYPES = {
     return { root, pos: new THREE.Vector3(x, 1.4, z), setStyle() {}, update() { draw(); } };
   },
 
+  // Wind turbine: 30 m tower, nacelle and three 13 m blades. Style 'braked' (still, red) or
+  // 'running' (spinning, green). Interact at the base cabinet.
+  turbine(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const H = 30, yaw = def.yaw ?? 0;
+    cyl(root, x, H / 2, z, 1.1, 1.7, H, 'white', 16);
+    box(root, x, .5, z, 4.5, 1, 4.5, 'concrete');
+    const top = new THREE.Group(); top.position.set(x, H, z); top.rotation.y = yaw; root.add(top);
+    box(top, 0, .5, .8, 2.2, 2, 5, 'white');
+    const hub = new THREE.Group(); hub.position.set(0, .5, -1.9); top.add(hub);
+    cyl(hub, 0, 0, 0, .7, .9, 1.2, 'white', 12).rotation.x = Math.PI / 2;
+    for (let i = 0; i < 3; i++) { const b = new THREE.Group(); b.rotation.z = i * Math.PI * 2 / 3; hub.add(b); box(b, 0, 7, -.2, .9, 13, .25, 'white'); }
+    const lampOff = emissive(0xe0503a, 1.6), lampOn = emissive(0x5ce08a, 1.8);
+    const beacon = box(top, 0, 1.6, .8, .3, .2, .3, lampOff);
+    box(root, x + 1.6, 1.1, z + 1.6, .8, 1.6, .6, 'edge');
+    const cab = box(root, x + 1.6, 1.6, z + 1.92, .3, .25, .04, lampOff);
+    box(root, x, 1.4, z + 1.62, 1.1, 2.2, .1, 'dark');                                   // door
+    const mover = addMover({ circles: [{ x, z, r: 1.7 }], box: new THREE.Box3(new THREE.Vector3(x - 1.3, 0, z - 1.3), new THREE.Vector3(x + 1.3, H, z + 1.3)) });
+    let spin = 0, last = 0;
+    const prop = {
+      root, mover, pos: new THREE.Vector3(x + 1.6, 1.2, z + 2.6),
+      setStyle(s) { const on = s === 'running'; beacon.material = on ? lampOn : lampOff; cab.material = on ? lampOn : lampOff; },
+      update(t) { const dt = Math.min(.1, Math.max(0, t - last)); last = t; spin += dt * (prop.style === 'running' ? 1.6 : .04); hub.rotation.z = spin; },
+    };
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -327,7 +354,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked' };
 
 export function spawnProps(defs) {
   G.props = {};

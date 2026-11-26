@@ -9,6 +9,10 @@ import { canvas, flashlight, camera } from '../src/engine/render.js';
 import { updateBlackout, districtLit } from '../src/game/blackout.js';
 import { liveAt } from '../src/game/switching.js';
 import { addEnemy } from '../src/game/bots.js';
+import { windVec, lightningStrike } from '../src/game/weather.js';
+import { spawnBomb } from '../src/game/weapons.js';
+import { moveBlocked } from '../src/game/world.js';
+import { CAMPAIGN } from '../src/missions/index.js';
 
 const log = [], errors = [];
 window.autotestLog = log;
@@ -24,6 +28,12 @@ const mouse = (type, button) => canvas.dispatchEvent(new MouseEvent(type, { butt
 const click = async id => { const el = document.getElementById(id); if (!el) throw new Error('missing button #' + id); el.click(); await frames(3); };
 function check(name, ok, detail = '') { log.push({ name, ok: !!ok, detail: String(detail) }); }
 const S = () => window.riverbendGame.state();
+// ?only=mNN runs just that mission's checks (jumping straight to its briefing).
+const ONLY = new URLSearchParams(location.search).get('only');
+async function goNext(n) {
+  if (ONLY) { const flow = await import('../src/game/flow.js'); flow.selectMission(n - 1); await frames(3); }
+  else await click('nextBtn');
+}
 const godMode = () => { G.local.health = 1e6; };
 
 async function holdE(seconds) { key('keydown', 'e'); await waitSim(seconds); key('keyup', 'e'); await frames(2); }
@@ -142,7 +152,7 @@ async function mission02() {
 }
 
 async function mission03() {
-  await click('nextBtn');
+  await goNext(3);
   check('next mission -> 03 briefing', S().status === 'briefing' && S().mission === 'm03', S().mission);
   check('dusk environment + switchback level', G.level.id === 'switchback' && G.env.sky === '#d9a98a');
   await click('startBtn'); godMode();
@@ -198,9 +208,9 @@ async function mission03() {
 }
 
 async function mission04() {
-  await click('missionsBtn');                                   // opens the mission list
-  const card = document.querySelector('[data-mission="m04"]');
-  card?.click(); await frames(3);
+  let card = { disabled: false };
+  if (ONLY) await goNext(4);
+  else { await click('missionsBtn'); card = document.querySelector('[data-mission="m04"]'); card?.click(); await frames(3); }
   check('mission 04 unlocked and selectable', !!card && !card.disabled && S().status === 'briefing' && S().mission === 'm04', S().mission);
   check('night yard with floodlights', G.level.id === 'fernhill' && G.env.dark && litAt(new THREE.Vector3(0, 0, -10)));
   await click('startBtn'); godMode();
@@ -253,7 +263,7 @@ async function mission04() {
 }
 
 async function mission05() {
-  await click('nextBtn');
+  await goNext(5);
   check('next mission -> 05 briefing', S().status === 'briefing' && S().mission === 'm05', S().mission);
   check('storm environment + Calder Dam level', G.level.id === 'calder' && G.env.sky === '#3c4750');
   await click('startBtn'); godMode();
@@ -316,7 +326,7 @@ async function mission05() {
 }
 
 async function mission06() {
-  await click('nextBtn');
+  await goNext(6);
   check('next mission -> 06 briefing (Act II)', S().status === 'briefing' && S().mission === 'm06', S().mission);
   check('Port Calder level with three districts', G.level.id === 'portcalder' && G.level.districts.length === 3 && G.env.dark);
   await click('startBtn'); godMode();
@@ -361,7 +371,7 @@ async function mission06() {
 }
 
 async function mission07() {
-  await click('nextBtn');
+  await goNext(7);
   check('next mission -> 07 briefing', S().status === 'briefing' && S().mission === 'm07', S().mission);
   check('tunnel level, underground lighting', G.level.id === 'tunnels' && G.env.dark && G.env.sun.intensity === 0);
   await click('startBtn'); godMode(); await waitSim(.3);
@@ -407,7 +417,7 @@ async function mission07() {
 }
 
 async function mission08() {
-  await click('nextBtn');
+  await goNext(8);
   check('next mission -> 08 briefing', S().status === 'briefing' && S().mission === 'm08', S().mission);
   await click('startBtn'); godMode();
   const V = (x, z) => new THREE.Vector3(x, 0, z);
@@ -442,7 +452,7 @@ async function mission08() {
 }
 
 async function mission09() {
-  await click('nextBtn');
+  await goNext(9);
   check('next mission -> 09 briefing', S().status === 'briefing' && S().mission === 'm09', S().mission);
   check('elevated viaduct level', G.level.id === 'viaduct' && G.escort?.cfg.prop === 'train');
   await click('startBtn'); godMode();
@@ -473,7 +483,7 @@ async function mission09() {
 }
 
 async function mission10() {
-  await click('nextBtn');
+  await goNext(10);
   check('next mission -> 10 briefing', S().status === 'briefing' && S().mission === 'm10', S().mission);
   check('freight yard level', G.level.id === 'railyard');
   await click('startBtn'); godMode();
@@ -483,8 +493,12 @@ async function mission10() {
   const tm = addEnemy({ type: 'tallyman', at: [0, -10] }), sn = addEnemy({ type: 'sentry', at: [0, 4] });
   tm.yaw = Math.PI; sn.yaw = 0; tm.memory = sn.memory = 0;
   await waitSim(Math.max(0, G.protectUntil + .6 - G.elapsed));
-  await waitSim(5);
-  check('Tallymen and LODESTAR machines fight each other', (tm.hp < tm.maxHp || tm.dead) && (sn.hp < sn.maxHp || sn.dead), 'tallyman ' + tm.hp.toFixed(0) + '/' + tm.maxHp + ' sentry ' + sn.hp.toFixed(0) + '/' + sn.maxHp);
+  // They must target each other, and the fight must draw blood (either side can win it).
+  let tmOnSn = false, snOnTm = false;
+  const watch = () => { if (tm.target === sn) tmOnSn = true; if (sn.target === tm) snOnTm = true; };
+  const blood = () => tm.hp < tm.maxHp || tm.dead || sn.hp < sn.maxHp || sn.dead;
+  for (let k = 0; k < 12 && !(tmOnSn && snOnTm && blood()); k++) await waitSim(1, watch);
+  check('Tallymen and LODESTAR machines fight each other', tmOnSn && snOnTm && blood(), 'tallyman ' + tm.hp.toFixed(0) + '/' + tm.maxHp + ' sentry ' + sn.hp.toFixed(0) + '/' + sn.maxHp + ' targeting ' + tmOnSn + '/' + snOnTm);
   damageEnemy(tm, 999, false, G.local); damageEnemy(sn, 999, false, G.local);
 
   teleport(-30, 22.6); await holdE(1.7); teleport(-20, 14.1); await holdE(1.7);
@@ -523,11 +537,93 @@ async function mission10() {
   check('Tallymen cleared -> Act II complete', S().status === 'won', S().status);
 }
 
+async function mission11() {
+  await goNext(11);
+  check('next mission -> 11 briefing (Act III)', S().status === 'briefing' && S().mission === 'm11', S().mission);
+  await click('startBtn'); godMode(); await waitSim(.3);
+  check('storm: wind, rain, wind readout', windVec().length() > 3 && document.getElementById('windPill').classList.contains('on') && S().weapon === 'arc', 'wind=' + windVec().length().toFixed(1));
+
+  // Wind pushes a grenade dropped from height.
+  const w0 = windVec().clone().normalize(), drop = new THREE.Vector3(-40, 12, 40);
+  spawnBomb(drop.clone(), new THREE.Vector3(0, 0, 0), G.local, 'smoke');
+  const bomb = G.bombs.at(-1); await waitSim(.6);
+  const drift = bomb.pos.clone().sub(drop).setY(0);
+  check('wind pushes grenades downwind', drift.length() > .3 && drift.normalize().dot(w0) > .8, drift.length().toFixed(2) + ' m');
+
+  // Arc carbine: stun + chain through a group of machines.
+  teleport(-40, 34, 0); G.simSteps = 0;
+  const grp = [addEnemy({ type: 'sentry', at: [-40, 20] }), addEnemy({ type: 'sentry', at: [-37, 19] }), addEnemy({ type: 'sentry', at: [-43, 18] })];
+  for (const e of grp) { e.yaw = 0; e.pos.set(e.def.at[0], 0, e.def.at[1]); }
+  const tgt = grp[0].pos.clone().setY(1.2), o = new THREE.Vector3(-40, 1.7, 30);
+  projectile(o, tgt.clone().sub(o).normalize(), 150, 24, G.local, false, false, null, 'arc');
+  G.simSteps = 1; await frames(6); G.simSteps = 6;
+  check('arc bolt stuns its target', grp[0].hp < grp[0].maxHp && grp[0].stunned > 0, 'hp=' + grp[0].hp.toFixed(0) + ' stun=' + (grp[0].stunned ?? 0).toFixed(2));
+  check('arc chains to two nearby machines', grp.slice(1).every(e => e.hp < e.maxHp && e.stunned > 0), grp.map(e => e.hp.toFixed(0)).join(','));
+  const at0 = grp[0].pos.clone(); await waitSim(.6);
+  check('stunned machines freeze', grp[0].pos.distanceTo(at0) < .05, grp[0].pos.distanceTo(at0).toFixed(3));
+  for (const e of grp) damageEnemy(e, 999, false, G.local);
+
+  // Lightning.
+  await waitSim(Math.max(0, G.protectUntil + .3 - G.elapsed));
+  const s0 = addEnemy({ type: 'sentry', at: [20, 40] }), dmg0 = G.local.stats.damage;
+  lightningStrike(s0.pos.x, s0.pos.z); lightningStrike(G.local.pos.x, G.local.pos.z);
+  check('lightning hurts machines and players', (s0.hp < s0.maxHp || s0.dead) && G.local.stats.damage > dmg0, 'sentry ' + s0.hp.toFixed(0) + ' dmg ' + (G.local.stats.damage - dmg0).toFixed(0));
+  G.nextStrike = 0; await waitSim(.3);
+  check('scheduled strike shows a warning ring first', G.strikes.length === 1 && G.markers.length > 0);
+  await waitSim(1.8);
+  check('then the strike lands', G.strikes.length === 0);
+
+  for (const [x, z] of [[-30 + 1.6, -30 + 4.6], [32 + 1.6, -28 + 4.6], [-4 + 1.6, 36 + 4.6]]) { teleport(x, z); await holdE(2.7); }
+  check('three lead turbines released -> whole string spins + checkpoint', S().objective === 1 && G.props.tA.style === 'running' && G.props.tT4.style === 'running' && G.checkpoint?.name === 'Turbines spinning', JSON.stringify({ o: S().objective, c: [...G.objState.collected], st: S().status, pos: G.local.pos.toArray().map(v => v.toFixed(1)), it: G.local.interaction?.name, ov: G.overlay }));
+  const n0 = G.enemies.length;
+  teleport(1.2, .3); await holdE(2.3);
+  check('collector closed -> Tallymen inbound', S().objective === 2 && G.enemies.length >= n0 + 3, S().objective);
+  G.objState.hold = 15.1; await waitSim(.3); G.objState.hold = 30.1; await waitSim(.3);
+  check('timed waves: LODESTAR push + Tallyman flank', G.fired.has('lodestar-push') && G.fired.has('tally-flank'));
+  G.objState.hold = 44.8; await waitSim(3);
+  check('collector held -> mission won', S().status === 'won', S().status);
+}
+
+/** Every mission: spawn points are clear in the data, and the player can walk away from the start. */
+async function spawnSafety() {
+  const flow = await import('../src/game/flow.js');
+  for (let i = 0; i < CAMPAIGN.length; i++) {
+    const m = CAMPAIGN[i];
+    flow.selectMission(i); await frames(2);
+    const bad = m.spawns.filter(([x, z]) => moveBlocked(x, z));
+    check(m.id + ': spawn points are clear', bad.length === 0, bad.map(q => q.slice(0, 2).join(',')).join(' | '));
+    await click('startBtn'); godMode();
+    let moved = 0;
+    for (const k of ['w', 's', 'a', 'd']) {
+      const p0 = G.local.pos.clone();
+      key('keydown', k); await waitSim(.35); key('keyup', k); await frames(1);
+      moved = Math.max(moved, G.local.pos.distanceTo(p0));
+      if (moved > .5) break;
+    }
+    check(m.id + ': player can walk away from the start', moved > .5, moved.toFixed(2) + ' m');
+  }
+  try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
+  flow.selectMission(0); await frames(3);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
   document.getElementById('quality').value = 'low';
   document.getElementById('quality').dispatchEvent(new Event('change'));
+  if (ONLY === 'spawns') { await spawnSafety(); }
+  else if (ONLY) {
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11 };
+    await fns[ONLY]();
+  }
+  if (ONLY) {
+    check('no runtime errors', errors.length === 0, errors.join(' | '));
+    const report = { passed: log.every(l => l.ok), log, errors, drawCalls: S().drawCalls };
+    const pre = document.createElement('pre'); pre.id = 'autotest-result'; pre.textContent = JSON.stringify(report); document.body.append(pre);
+    document.title = report.passed ? 'AUTOTEST PASS' : 'AUTOTEST FAIL';
+    return;
+  }
+  await spawnSafety();
   await mission01();
   await mission02();
   await mission03();
@@ -538,6 +634,7 @@ async function run() {
   await mission08();
   await mission09();
   await mission10();
+  await mission11();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

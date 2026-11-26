@@ -7,5 +7,6 @@ import tunnels from './tunnels.js';
 import kelso from './kelso.js';
 import viaduct from './viaduct.js';
 import railyard from './railyard.js';
+import galeline from './galeline.js';
 
-export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard].map(l => [l.id, l]));
+export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard, galeline].map(l => [l.id, l]));

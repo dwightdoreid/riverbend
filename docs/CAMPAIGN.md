@@ -145,5 +145,7 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 08 *Live Wire*: the switching puzzle with interlocks and arc flash, live zones that hurt machines too, and the mimic board.
      - Done: 09 *Last Train*: elevated viaduct, train escort with powered sections, station boarding hold, and the first sighting of Halvard drones.
      - Done: 10 *Ironwalker*: the knee/core boss with kneel-and-recover phases, the Tallymen, and factions with three-way fights. **Act II complete.**
-   - **Next: Act III, *Islanding*, on the northern frontier (missions 11–15).** First up is 11 *Gale Line*: a wind farm in a storm.
+   - **In progress: Act III, *Islanding*, on the northern frontier.**
+     - Done: 11 *Gale Line*: wind, lightning and rain, the ARC-3 carbine, and spinning turbines.
+     - Next: 12 *Three-Way*: hold three relay towers at once.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

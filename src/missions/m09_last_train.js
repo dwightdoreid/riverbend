@@ -36,7 +36,7 @@ export default {
   },
   failure: { eyebrow: 'Mission incomplete / retry available', title: 'DERAILED.', text: 'Engage raiders before they reach the train, and clear the next stretch of deck before it rolls into it.' },
 
-  spawns: [[-7.5, 79, 0], [-6, 80.5, 0], [-8.5, 81, 0], [-5, 82, 0]],
+  spawns: [[-6.5, 79, 0], [-5.5, 80.5, 0], [-6.5, 82.5, 0], [-5, 83.5, 0]],   // between the train and the platform benches
 
   props: [
     { id: 'train', type: 'train', at: [TX, 70] },

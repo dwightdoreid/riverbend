@@ -11,6 +11,7 @@ import { sound } from '../engine/audio.js';
 import { fxAll, isClient, inCoop } from '../net/net.js';
 import { districtAt, districtState } from '../game/blackout.js';
 import { liveAt } from '../game/switching.js';
+import { windVec } from '../game/weather.js';
 
 const ui = { toastLeft: 0, hitLeft: 0, damageFlash: 0, objKey: '' };
 
@@ -121,6 +122,13 @@ export function updateUI(dt) {
   $('flashState').textContent = p.flashlight ? 'LIGHT ON' : '';
   updateDownedUI(p);
   $('liveWarn').classList.toggle('on', p.alive && !p.downed && liveAt(p.pos));
+  // Wind readout: arrow shows where the wind blows, relative to where you're facing.
+  const wv = windVec(), ws = wv.length();
+  $('windPill').classList.toggle('on', !!G.mission?.weather?.wind);
+  if (G.mission?.weather?.wind) {
+    $('windSpeed').textContent = 'WIND ' + Math.round(ws) + ' m/s';
+    $('windArrow').style.transform = 'rotate(' + (Math.atan2(wv.x, -wv.z) + p.yaw) + 'rad)';
+  }
   // Rolling-blackout readout for the district the player is in.
   const dist = G.mission?.blackout ? districtAt(p.pos) : null, ds = districtState(dist);
   $('gridPill').classList.toggle('on', !!ds);

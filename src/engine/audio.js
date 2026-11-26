@@ -28,6 +28,11 @@ export function sound(kind = 'shot', level = 1) {
     const o = audio.createOscillator(); o.type = 'triangle';
     o.frequency.setValueAtTime(kind === 'blast' ? 90 : 160, t); o.frequency.exponentialRampToValueAtTime(35, t + dur);
     o.connect(g); o.start(t); o.stop(t + dur);
+  } else if (kind === 'arc') {
+    const o = audio.createOscillator(); o.type = 'square';
+    o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(260, t + .16);
+    g.gain.setValueAtTime(.06 * level, t); g.gain.exponentialRampToValueAtTime(.001, t + .18);
+    o.connect(g); o.start(t); o.stop(t + .2);
   } else {
     const o = audio.createOscillator(); o.type = 'sine';
     o.frequency.setValueAtTime(kind === 'hit' ? 760 : kind === 'reload' ? 310 : kind === 'hurt' ? 130 : kind === 'radio' ? 1180 : 560, t);

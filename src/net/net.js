@@ -12,12 +12,13 @@ import { sound } from '../engine/audio.js';
 import { G } from '../game/state.js';
 import { createPlayer, resupplyPlayer, needsAmmo } from '../game/players.js';
 import { addEnemy } from '../game/bots.js';
-import { projectile, burst, explosionFx, alertNoise, makeSmoke } from '../game/combat.js';
+import { projectile, burst, explosionFx, alertNoise, makeSmoke, arcBolts } from '../game/combat.js';
 import { spawnBomb } from '../game/weapons.js';
 import { freePoint } from '../game/world.js';
 import { poseEscort } from '../game/mission.js';
 import { makeTurret, syncTurretVisuals } from '../game/turrets.js';
 import { clientMortar } from '../game/bosses.js';
+import { lightningStrike } from '../game/weather.js';
 import { updateHUD } from '../ui/hud.js';
 import { say, feed, radio, showHit, showDamage } from '../ui/hud.js';
 import { openTransport, randomCode } from './transport.js';
@@ -129,7 +130,7 @@ function onClientConnected(conn) {
     if (m.t === 'in' && p) applyRemoteInput(p, m);
     else if (m.t === 'shot' && p && p.alive && !p.downed) {
       alertNoise(p.pos, 35);
-      projectile(new THREE.Vector3(...m.o), new THREE.Vector3(...m.d), m.s, m.dm, p);
+      projectile(new THREE.Vector3(...m.o), new THREE.Vector3(...m.d), m.s, m.dm, p, false, false, null, m.k ?? null);
     } else if (m.t === 'nade' && p && p.alive && !p.downed) {
       if (m.k !== 'smoke') p.stats.grenades++;
       spawnBomb(new THREE.Vector3(...m.p), new THREE.Vector3(...m.v), p, m.k ?? 'frag');
@@ -312,12 +313,14 @@ function applyFx(ev) {
     case 'enemy': addEnemy(ev.def, ev.alert ? new THREE.Vector3(ev.alert[0], 0, ev.alert[1]) : null); break;
     case 'shot': {
       const owner = ev.by >= 0 ? G.players.find(q => q.id === ev.by) ?? null : null;
-      projectile(new THREE.Vector3(...ev.o), new THREE.Vector3(...ev.d), ev.s, 0, ev.h ? null : (owner ?? G.local), true);
+      projectile(new THREE.Vector3(...ev.o), new THREE.Vector3(...ev.d), ev.s, 0, ev.h ? null : (owner ?? G.local), true, false, null, ev.k ?? null);
       if (G.local) sound('shot', Math.max(.02, (ev.h ? .1 : .2) - G.local.pos.distanceTo(new THREE.Vector3(ev.o[0], 0, ev.o[2])) * .001));
       break;
     }
     case 'boom': explosionFx(new THREE.Vector3(...ev.p)); break;
     case 'mortar': clientMortar(ev); break;
+    case 'strike': lightningStrike(ev.p[0], ev.p[1], false); break;
+    case 'arc': arcBolts(ev.pts.map(q => new THREE.Vector3(...q))); break;
     case 'smoke': makeSmoke(new THREE.Vector3(...ev.p)); break;
     case 'burst': burst(new THREE.Vector3(...ev.p), ev.c, ev.n, ev.pw); break;
     case 'say': say(ev.text, ev.time); break;
@@ -372,7 +375,7 @@ export function netTick(dt) {
 }
 
 /** Client: ask the host to fire a shot / throw a grenade. */
-export function sendShot(o, d, s, dm) { net.hostConn?.send({ t: 'shot', o: o.toArray().map(r2), d: d.toArray().map(v => Math.round(v * 1e4) / 1e4), s, dm }); }
+export function sendShot(o, d, s, dm, k = null) { net.hostConn?.send({ t: 'shot', o: o.toArray().map(r2), d: d.toArray().map(v => Math.round(v * 1e4) / 1e4), s, dm, k }); }
 export function sendGrenade(pos, vel, kind = 'frag') { net.hostConn?.send({ t: 'nade', p: pos.toArray().map(r2), v: vel.toArray().map(r2), k: kind }); }
 
 

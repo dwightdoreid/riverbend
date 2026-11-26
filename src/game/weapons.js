@@ -15,6 +15,8 @@ export const WEAPONS = {
   shotgun: { name: 'SG-8 / SHOTGUN', short: 'shotgun', mode: 'PUMP · 8 PELLETS', cap: 6, reserveMax: 30, interval: .78, reload: 2.6, damage: 15, pellets: 8, pelletSpread: .055, spread: .012, kick: .045, speed: 190, auto: false, sound: 'shotgun' },
   // Marksman rifle: hard-hitting semi-auto with a strong zoom (zoom = degrees of FOV removed when aiming).
   dmr: { name: 'DMR-14 / MARKSMAN', short: 'dmr', mode: 'SEMI · ZOOM', cap: 10, reserveMax: 40, interval: .34, reload: 2.4, damage: 70, spread: .0025, kick: .034, speed: 320, auto: false, sound: 'dmr', zoom: 46 },
+  // Arc carbine: electric bolts that stun a machine and chain to up to two more nearby.
+  arc: { name: 'ARC-3 / ARC CARBINE', short: 'arc', mode: 'SEMI · STUN + CHAIN', cap: 16, reserveMax: 64, interval: .27, reload: 2.2, damage: 24, spread: .006, kick: .02, speed: 150, auto: false, sound: 'arc', arc: { chains: 2, range: 7, stun: 1.4 } },
 };
 export const DEFAULT_LOADOUT = ['rifle', 'pistol'];
 
@@ -33,8 +35,9 @@ export function fire(p) {
   const origin = eyeOf(p);
   for (let i = 0; i < (w.pellets ?? 1); i++) {
     const dir = aimDirection(p, spreadOf(p) + (w.pelletSpread ?? 0) * (w.pellets ? Math.random() : 0));
-    if (isClient()) { sendShot(origin, dir, w.speed, w.damage); projectile(origin, dir, w.speed, 0, p, true); }
-    else projectile(origin, dir, w.speed, w.damage, p);
+    const kind = w.arc ? 'arc' : null;
+    if (isClient()) { sendShot(origin, dir, w.speed, w.damage, kind); projectile(origin, dir, w.speed, 0, p, true, false, null, kind); }
+    else projectile(origin, dir, w.speed, w.damage, p, false, false, null, kind);
   }
   alertNoise(p.pos, 35);
   p.kick = Math.min(.14, p.kick + w.kick * (p.aiming ? .72 : 1));

@@ -8,6 +8,7 @@ import { WEAPONS, DEFAULT_LOADOUT, fire } from './weapons.js';
 import { alertNoise } from './combat.js';
 import { sfxFor } from './fx.js';
 import { updateHUD } from '../ui/hud.js';
+import { windVec } from './weather.js';
 
 export const STAND_EYE = 1.72, CROUCH_EYE = 1.12, MAX_HEALTH = 100, MAX_GRENADES = 3;
 
@@ -83,6 +84,10 @@ export function updatePlayer(p, dt) {
     p.bob += dt * (p.sprinting ? 12 : 8);
     if (p.sprinting) alertNoise(p.pos, 12);
   }
+  // Strong wind leans on you while you move (about 0.6 m/s in a full gust). Standing still you
+  // brace against it, so it never drags you off a hold-to-interact.
+  const wind = windVec();
+  if (moving && wind.lengthSq() > 1) { const dx = wind.x * .045 * dt, dz = wind.z * .045 * dt; if (!moveBlocked(p.pos.x + dx, p.pos.z + dz)) { p.pos.x += dx; p.pos.z += dz; } }
   p.stamina = THREE.MathUtils.clamp(p.stamina + (p.sprinting ? -23 : 14) * dt, 0, 100);
   p.eye = THREE.MathUtils.damp(p.eye, p.crouched ? CROUCH_EYE : STAND_EYE, 12, dt);
   p.aimBlend = THREE.MathUtils.damp(p.aimBlend, p.aiming && p.weapon !== 'grenade' && !p.sprinting && p.reloadLeft <= 0 ? 1 : 0, 14, dt);

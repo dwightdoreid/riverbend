@@ -24,6 +24,13 @@ function gunModel(type) {
     box(g, 0, -.15, .09, .09, .22, .11, 'dark').rotation.x = -.24;
     rod(g, [0, .017, -.13], [0, .017, -.2], .019, 'dark', 8); box(g, 0, .09, -.115, .017, .03, .023, 'steel');
     box(g, 0, .09, .08, .06, .025, .03, 'dark'); box(g, .067, -.15, .12, .065, .12, .14, 'green');
+  } else if (type === 'arc') {
+    const coil = new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x3fa8ff, emissiveIntensity: 1.4 });
+    box(g, 0, 0, 0, .13, .17, .4, 'edge'); box(g, 0, -.04, .3, .11, .16, .24, 'dark');
+    for (let z = -.2; z >= -.5; z -= .08) cyl(g, 0, .03, z, .055, .055, .035, coil, 10).rotation.x = Math.PI / 2;   // coils
+    rod(g, [0, .03, -.15], [0, .03, -.6], .025, 'dark', 8);
+    box(g, 0, .13, -.05, .05, .07, .2, coil);
+    box(g, 0, -.17, .08, .08, .22, .1, 'edge').rotation.x = -.3;
   } else if (type === 'dmr') {
     box(g, 0, 0, .02, .11, .15, .42, 'dark');                                   // receiver
     rod(g, [0, .03, -.2], [0, .03, -.86], .02, 'dark', 10);                     // long barrel
@@ -46,7 +53,7 @@ function gunModel(type) {
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
 }
-['rifle', 'pistol', 'shotgun', 'dmr', 'grenade'].forEach(gunModel);
+['rifle', 'pistol', 'shotgun', 'dmr', 'arc', 'grenade'].forEach(gunModel);
 
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdca1, transparent: true, opacity: .9, depthTest: false });
 const muzzle = mesh(gunRig, geo('cone', .075, .23, 5), flashMat, 0, .03, -.79);

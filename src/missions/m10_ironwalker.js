@@ -35,7 +35,8 @@ export default {
   },
   failure: { eyebrow: 'Mission incomplete / retry available', title: 'FLATTENED.', text: 'Keep moving so the debris rings miss you, never stand under it, and save the DMR for the knees.' },
 
-  spawns: [[-38, 32, 0], [-36, 32, 0], [-38, 30, 0], [-36, 30, 0]],
+  // Open ground just south of the relief train (clear of the container stack to the west).
+  spawns: [[-31, 33, 0], [-29, 33, 0], [-31, 34.6, 0], [-29, 34.6, 0]],
 
   props: [
     { id: 'reliefTrain', type: 'train', at: [-26, 28.5], yaw: Math.PI / 2 },

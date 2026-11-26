@@ -8,9 +8,10 @@ import { sound } from '../engine/audio.js';
 import { sfxFor, sfxAt, tell } from './fx.js';
 import { feed, showHit, showDamage } from '../ui/hud.js';
 import { isHost, fxAll, fxTo } from '../net/net.js';
+import { windVec } from './weather.js';
 import { finish } from './flow.js';
 
-const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 });
+const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 }), arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe0ff });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
 
 const r2 = v => Math.round(v * 100) / 100;
@@ -18,13 +19,13 @@ const r2 = v => Math.round(v * 100) / 100;
 /** owner: the player who fired, or null for hostile (enemy) fire.
  *  visual: a client-side copy that only draws (the host decides what real shots hit). */
 /** src: the machine that fired (its faction decides which machines the round can hit). */
-export function projectile(origin, dir, speed, damage, owner = null, visual = false, echoOwner = false, src = null) {
+export function projectile(origin, dir, speed, damage, owner = null, visual = false, echoOwner = false, src = null, kind = null) {
   const hostile = !owner;
   // The shooter's own browser already drew its shot, so it is skipped unless echoOwner (turrets).
-  if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1 }, owner && !owner.local && !echoOwner ? owner.id : null);
-  const m = new THREE.Mesh(geo('sphere', .035, 5, 4), hostile ? hostileMat : bulletMat);
+  if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1, k: kind }, owner && !owner.local && !echoOwner ? owner.id : null);
+  const m = new THREE.Mesh(geo('sphere', kind === 'arc' ? .07 : .035, 5, 4), kind === 'arc' ? arcMat : hostile ? hostileMat : bulletMat);
   m.position.copy(origin); G.dynRoot.add(m);
-  G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, src, faction: src?.faction ?? 'lodestar', life: 1.6, mesh: m });
+  G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, src, faction: src?.faction ?? 'lodestar', kind, life: 1.6, mesh: m });
 }
 
 export function alertNoise(pos, r) {
@@ -175,7 +176,7 @@ export function updateProjectiles(dt) {
       if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
       else if (p.hostile && victim?.isEnemy) damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, null, { dir, by: p.src, part: part?.id });
       else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
-      else if (victim) { p.owner.stats.hits++; damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir, part: part?.id }); burst(h, 0xd7c599, 4, 1.3); }
+      else if (victim) { p.owner.stats.hits++; if (p.kind === 'arc') arcStrike(victim, p.owner, p.damage, head, dir, part); else damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir, part: part?.id }); burst(h, p.kind === 'arc' ? 0x9fe0ff : 0xd7c599, 4, 1.3); }
       else { impact(wall.point); if (wall.mover?.onHit && !p.visual) wall.mover.onHit(p.damage, p.hostile); }
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
     }
@@ -188,6 +189,7 @@ export function updateBombs(dt) {
   for (let i = G.bombs.length - 1; i >= 0; i--) {
     const b = G.bombs[i];
     b.fuse -= dt; b.vel.y -= 12 * dt;
+    if (b.pos.y > .3) b.vel.addScaledVector(windVec(), dt * .9);   // wind pushes grenades in flight
     const delta = b.vel.clone().multiplyScalar(dt), len = delta.length(), hit = len > 0 ? castSolid(b.pos, delta.clone().normalize(), len + .085) : null;
     if (hit) {
       const normal = new THREE.Vector3(0, 1, 0);
@@ -219,6 +221,37 @@ export function explosionFx(p) {
   sfxAt(p, 'blast', 1, 85, .15);
 }
 
+// ---------------------------------------------------------------- arc carbine
+
+const ARC_MAT = new THREE.MeshBasicMaterial({ color: 0xbfeaff });
+/** Short-lived electric bolts along a list of points (also drawn on co-op clients). */
+export function arcBolts(points) {
+  for (let i = 1; i < points.length; i++) {
+    const a = points[0], b = points[i];
+    for (let k = 0; k < 3; k++) {
+      const m1 = a.clone().lerp(b, (k + 1) / 4).add(new THREE.Vector3((Math.random() - .5) * .6, (Math.random() - .5) * .6, (Math.random() - .5) * .6));
+      const p0 = k === 0 ? a : a.clone().lerp(b, k / 4), seg = new THREE.Mesh(new THREE.BoxGeometry(.06, 1, .06), ARC_MAT), len = p0.distanceTo(m1);
+      seg.scale.y = len; seg.position.copy(p0).add(m1).multiplyScalar(.5); seg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), m1.clone().sub(p0).normalize());
+      G.dynRoot.add(seg); G.effects.push({ m: seg, v: new THREE.Vector3(), life: .16, total: .16, still: true });
+    }
+  }
+}
+
+export function stun(e, s) { if (!e.type.boss) e.stunned = Math.max(e.stunned ?? 0, s); }
+
+/** Arc hit: damage + stun the victim, then chain to the nearest machines in range. */
+function arcStrike(victim, owner, dmg, head, dir, part) {
+  const cfg = { chains: 2, range: 7, stun: 1.4 };
+  const center = e => e.pos.clone().setY(e.type.centerY);
+  damageEnemy(victim, dmg * (head ? 1.3 : 1), head, owner, { dir, part: part?.id });
+  stun(victim, cfg.stun);
+  const chained = G.enemies.filter(o => !o.dead && o !== victim && o.pos.distanceTo(victim.pos) < cfg.range)
+    .sort((a, b) => a.pos.distanceTo(victim.pos) - b.pos.distanceTo(victim.pos)).slice(0, cfg.chains);
+  for (const o of chained) { damageEnemy(o, dmg * .6, false, owner, { explosive: true }); stun(o, cfg.stun * .8); }
+  const pts = [center(victim), ...chained.map(center)];
+  arcBolts(pts); fxAll({ t: 'arc', pts: pts.map(q => q.toArray().map(r2)) });
+}
+
 // ---------------------------------------------------------------- smoke
 
 const SMOKE_LIFE = 13, SMOKE_R = 4.6;
@@ -242,6 +275,7 @@ export function updateSmokes(dt) {
     const age = SMOKE_LIFE - s.life, grow = Math.min(1, age / 1.2), fade = Math.min(1, s.life / 2.5);
     for (const m of s.puffs) { m.scale.setScalar(m.userData.s * (.3 + grow * .9)); m.material.opacity = .55 * grow * fade; m.position.y += dt * .05; }
     s.r = SMOKE_R * (.4 + grow * .6) * (.6 + .4 * fade);
+    const w = windVec(); s.pos.addScaledVector(w, dt * .35); for (const m of s.puffs) m.position.addScaledVector(w, dt * .35);   // smoke drifts downwind
     if (s.life <= 0) { for (const m of s.puffs) { m.removeFromParent(); m.material.dispose(); } G.smokes.splice(i, 1); }
   }
 }
@@ -284,7 +318,7 @@ function explode(b) {
 export function updateEffects(dt) {
   for (let i = G.effects.length - 1; i >= 0; i--) {
     const e = G.effects[i]; e.life -= dt;
-    if (e.m) { e.v.y -= 5 * dt; e.m.position.addScaledVector(e.v, dt); e.m.rotation.x += dt * 6; }
+    if (e.m && !e.still) { e.v.y -= 5 * dt; e.m.position.addScaledVector(e.v, dt); e.m.rotation.x += dt * 6; }
     if (e.light) e.light.intensity = 10 * Math.max(0, e.life / e.total);
     if (e.ring) { e.ring.scale.setScalar(1 + (1 - e.life / e.total) * 7); e.ring.material.opacity = Math.max(0, e.life / e.total) * .28; }
     if (e.life <= 0) { (e.m || e.light || e.ring).removeFromParent(); if (e.ring) e.ring.material.dispose(); G.effects.splice(i, 1); }
