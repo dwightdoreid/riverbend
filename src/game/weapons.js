@@ -1,4 +1,6 @@
 // Weapon definitions and the actions a player can take with them.
+import { muzzleFlash } from './vfx.js';
+import { casing } from './viewmodel.js';
 import { THREE } from '../engine/three.js';
 import { cyl, box } from '../engine/builders.js';
 import { G } from './state.js';
@@ -51,6 +53,7 @@ export function fire(p) {
   p.kick = Math.min(.14, p.kick + w.kick * (p.aiming ? .72 : 1));
   p.yaw += (Math.random() - .5) * w.kick * .3;
   p.weaponKick = Math.min(.13, p.weaponKick + .07); p.muzzleLeft = .065;
+  if (p.local) { if (!w.quiet) muzzleFlash(p); casing(p); }
   sfxFor(p, w.sound, w.quiet ? .25 : 1); hud(p);
 }
 

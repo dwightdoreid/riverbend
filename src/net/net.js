@@ -7,6 +7,7 @@
 //    the host spawns the real projectiles and decides what they hit.
 //  - The host sends a snapshot 20x per second plus a reliable, ordered stream of events
 //    (enemy spawns, radio, hit markers, explosions...).
+import { wreck } from '../game/vfx.js';
 import { THREE } from '../engine/three.js';
 import { sound } from '../engine/audio.js';
 import { G } from '../game/state.js';
@@ -299,7 +300,7 @@ function applySnapshot(s) {
     e.elev = elev;
     (e.netPos ??= new THREE.Vector3()).set(x, 0, z); e.netYaw = yaw; e.hp = hp;
     const dead = !!(f & 1);
-    if (dead && !e.dead) e.g.visible = false;
+    if (dead && !e.dead) { wreck(e); e.g.visible = false; }
     e.dead = dead; e.visible = !!(f & 2); e.state = STATES[(f >> 2) & 3]; e.exposed = !!(f & 16);
     if (e.visible) e.seenAt = G.elapsed;
   });

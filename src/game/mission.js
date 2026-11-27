@@ -1,6 +1,7 @@
 // Loads levels and missions and runs them: objectives, triggers, scripted events, checkpoints,
 // and hold-to-interact for objectives and pickups. Mission files are pure data; every verb
 // they can use is defined here (see EVENTS, objective types and trigger conditions).
+import { clearVfx } from './vfx.js';
 import { THREE } from '../engine/three.js';
 import { scene, applyEnvironment, ENV_PRESETS } from '../engine/render.js';
 import { sound } from '../engine/audio.js';
@@ -82,6 +83,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupSwitching();
   setupWeather();
   setupStealth();
+  clearVfx();
   setupSync();
   G.ending = null;
   spawnPickups(mission.pickups ?? []);

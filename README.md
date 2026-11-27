@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 362 scripted solo checks (missions 01–20, phase 4 features + spawn safety) in headless Chrome
+python3 tools/smoke_test.py                  # 371 scripted solo checks (missions 01–20, phase 4 features + spawn safety) in headless Chrome
 python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m20), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
@@ -211,3 +211,10 @@ sequencer: pad, bass, arpeggio, hats, drums and a boss lead cross-fade with inte
 combat, boss) in a mood per environment (key, scale, tempo, timbre; `mission.music` overrides), with
 stingers for checkpoints, the alarm, wins and losses. Ambience beds: wind, rain, the 50 Hz grid hum
 near equipment, cave drips; reverb per level. `&only=p4b` runs these checks alone.
+
+### Effects (phase 4c)
+`src/game/vfx.js` (cosmetic, every machine, frame rate): tracers, sparks off machines and metal, dust
+off the ground, fireballs with debris, smoke and scorch marks, charred machine wrecks that fall,
+smoke and sink away (also on co-op clients), camera shake, a muzzle-flash light (created once at
+startup so the light count never changes) and ejected casings. Counts scale with the Graphics
+setting (Low: about 40%, no casings). `&only=p4c` runs these checks alone.

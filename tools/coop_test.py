@@ -117,6 +117,8 @@ def main():
           m.sendShot(o, d, 240, 31); return true;""")
         check('client shot damages enemy on host', host.wait_for(f"{G}.enemies[0].hp < {hp0}"), f"{hp0} -> {host.js(f'{G}.enemies[0].hp')}")
         check('enemy damage shows on client', client.wait_for(f"{G}.enemies[0].hp < {hp0}"))
+        host.mod('/src/game/combat.js', f"m.damageEnemy({G}.enemies[1], 1e6, false, {G}.local); return true")
+        check('a machine destroyed on the host leaves a wreck on the client', client.wait_for("import('/src/game/vfx.js').then(v => v.vfxCount('wreck') >= 1)"))
 
         # Host-side damage to the client player reaches the client.
         host.mod('/src/game/combat.js', f"{G}.protectUntil = 0; m.hurt({G}.players.find(q => !q.local), 30, null); return true")

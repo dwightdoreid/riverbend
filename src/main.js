@@ -1,4 +1,5 @@
 // Entry point: wires modules together and runs the frame loop.
+import { setupVfx, updateVfx } from './game/vfx.js';
 import { $ } from './engine/dom.js';
 import { renderer, camera, canvas, setQuality, resize, renderFrame, flashlight, FLASHLIGHT_INTENSITY } from './engine/render.js';
 import { setVolume, setMusicVolume, volumes, sound } from './engine/audio.js';
@@ -41,8 +42,9 @@ $('volume').value = volumes().master; $('musicVolume').value = volumes().music;
 $('volume').oninput = e => setVolume(+e.target.value);
 $('musicVolume').oninput = e => setMusicVolume(+e.target.value);
 document.addEventListener('click', e => { if (e.target.closest?.('#screen button')) sound('click'); });   // menu feedback
-$('quality').onchange = e => setQuality(e.target.value);
-setQuality('medium');
+$('quality').onchange = e => { G.quality = e.target.value; setQuality(e.target.value); };
+G.quality = 'medium'; setQuality('medium');
+setupVfx();
 setupInput();
 setupCoopPanel();
 window.addEventListener('resize', resize);
@@ -101,6 +103,7 @@ function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min((now - last) / 1000, .05); last = now;
   updateSoundtrack(dt);   // music and ambience follow every state (menus, play, scorecard)
+  updateVfx(dt);
   if (G.status === 'playing') {
     for (let i = 0; i < G.simSteps && G.status === 'playing'; i++) (isClient() ? clientStep : step)(dt);
     if (G.status === 'playing') {

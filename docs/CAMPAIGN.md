@@ -160,4 +160,5 @@ There are 13 environments, and some are reused with different lighting or layout
 5. **In progress: Phase 4, polish.**
    - Done: 4a, difficulty (Recruit / Operator / Lineman) and medals (Swift, Marksman, Untouched, Hardened).
    - Done: 4b, music and audio: adaptive procedural soundtrack, ambience beds, positional effects, footsteps.
-   - Next: 4c effects; 4d mobile performance; 4e balancing (including par times).
+   - Done: 4c, effects: tracers, sparks, dust, explosions with debris and scorch, machine wrecks, camera shake, muzzle light, casings.
+   - Next: 4d mobile performance; 4e balancing (including par times).

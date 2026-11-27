@@ -1190,8 +1190,7 @@ async function phase4b() {
   check('footsteps while moving', st().steps > s0 + 2, st().steps - s0);
   // Environment: underground tunnels have reverb, drips and no wind; the core chamber hums.
   flow.selectMission(6); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
-  await new Promise(r => setTimeout(r, 1500));   // the reverb glides to its new level in real time
-  check('mission 07: underground mood, no wind, big reverb', st().mood === 'underground' && st().beds.wind < .05 && A.audioCtx().bus.wet.gain.value > .3, st().mood + ' ' + st().beds.wind + ' ' + A.audioCtx().bus.wet.gain.value.toFixed(2));
+  check('mission 07: underground mood, no wind, big reverb', st().mood === 'underground' && st().beds.wind < .05 && A.reverbTarget() > .3, st().mood + ' ' + st().beds.wind + ' ' + A.reverbTarget());
   flow.selectMission(10); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
   check('mission 11: storm mood, wind and rain beds', st().mood === 'storm' && st().beds.wind > .2 && st().beds.rain > .2, JSON.stringify(st().beds));
   flow.selectMission(19); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
@@ -1204,6 +1203,41 @@ async function phase4b() {
   check('scorecard: drums out, pad stays', st().layers.drums === 0 && st().layers.pad > 0, JSON.stringify(st().layers));
 }
 
+async function phase4c() {
+  const V = await import('../src/game/vfx.js'), C = await import('../src/game/combat.js'), flow = await import('../src/game/flow.js'), W = await import('../src/game/weapons.js');
+  const qsel = document.getElementById('quality'); qsel.value = 'medium'; qsel.dispatchEvent(new Event('change'));   // the runner uses Low for speed
+  flow.selectMission(0); await frames(3); await click('startBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }
+  check('mission start clears old effects', V.vfxCount() < 5, V.vfxCount());
+  // Tracers: elongated and pointing along the flight path.
+  const dir = new THREE.Vector3(1, 0, 0); C.projectile(G.local.pos.clone().setY(1.5), dir, 240, 0, G.local, true);
+  const tr = G.projectiles[G.projectiles.length - 1].mesh, ax = new THREE.Vector3(0, 0, 1).applyQuaternion(tr.quaternion);
+  check('bullets render as tracers along their path', tr.scale.z > 1.5 && ax.dot(dir) > .99, tr.scale.z.toFixed(2));
+  // Firing: muzzle light and a casing.
+  const mag0 = G.local.ammo.rifle.mag; G.local.pitch = -.2; mouse('mousedown', 0); await frames(2); mouse('mouseup', 0);
+  check('firing: muzzle light and an ejected casing', V.vfxCount('casing') >= 1, 'casings ' + V.vfxCount('casing') + ' fired=' + (mag0 - G.local.ammo.rifle.mag) + ' w=' + G.local.weapon + ' q=' + G.quality);
+  // Impacts: dust off the ground.
+  const before = V.vfxCount('puff'); C.projectile(G.local.pos.clone().setY(1.5), new THREE.Vector3(.3, -1, 0).normalize(), 240, 0, G.local, true); await frames(4);
+  check('a round into the ground kicks up dust', V.vfxCount('puff') > before, V.vfxCount('puff') - before);
+  // Explosions: fireball, debris, scorch, smoke, camera shake.
+  const p = G.local.pos.clone().add(new THREE.Vector3(6, .2, 0));
+  C.explosionFx(p);
+  check('explosion: fireball, debris, scorch and smoke', V.vfxCount('ball') === 1 && V.vfxCount('debris') >= 4 && V.vfxCount('scorch') >= 1 && V.vfxCount('puff') >= 3, ['ball', 'debris', 'scorch', 'puff'].map(k => V.vfxCount(k)).join('/') + ' q=' + G.quality + ' sel=' + document.getElementById('quality').value);
+  check('a nearby blast shakes the camera', !!V.shakeOffset());
+  // Kills leave a smoking wreck that later sinks away.
+  const e = addEnemy({ type: 'sentry', at: [G.local.pos.x + 8, G.local.pos.z] }), w0 = V.vfxCount('wreck');
+  damageEnemy(e, 1e6, false, G.local);
+  check('a destroyed machine leaves a charred wreck', V.vfxCount('wreck') === w0 + 1);
+  for (let i = 0; i < 45; i++) V.updateVfx(.5);
+  check('wrecks and effects clear themselves', V.vfxCount('wreck') === 0 && V.vfxCount('scorch') === 0, V.vfxCount());
+  // Low graphics: fewer particles, no casings.
+  const q = document.getElementById('quality'); q.value = 'low'; q.dispatchEvent(new Event('change'));
+  V.sparks(G.local.pos.clone(), 10); const lowSparks = V.vfxCount('spark');
+  mouse('mousedown', 0); await frames(1); mouse('mouseup', 0);
+  check('low graphics: a fraction of the particles, no casings', lowSparks <= 5 && V.vfxCount('casing') === 0, lowSparks + ' sparks');
+  q.value = 'low'; q.dispatchEvent(new Event('change'));   // back to the runner's setting
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -1211,7 +1245,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20, p4a: phase4a, p4b: phase4b };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20, p4a: phase4a, p4b: phase4b, p4c: phase4c };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -1244,9 +1278,11 @@ async function run() {
   await mission20();
   await phase4a();
   await phase4b();
+  await phase4c();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
-  await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
+  if (S().status !== 'playing') await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn');
+  godMode();
 
   check('no runtime errors', errors.length === 0, errors.join(' | '));
   const report = { passed: log.every(l => l.ok), log, errors, drawCalls: S().drawCalls };

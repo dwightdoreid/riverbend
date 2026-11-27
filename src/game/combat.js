@@ -1,4 +1,5 @@
 // Projectiles, grenades, damage and hit effects.
+import { sparks, dust, smoke, blastFx, wreck } from './vfx.js';
 import { THREE } from '../engine/three.js';
 import { geo } from '../engine/builders.js';
 import { G } from './state.js';
@@ -13,7 +14,8 @@ import { finish } from './flow.js';
 import { damageProp } from './props.js';
 import { diff } from './difficulty.js';
 
-const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 }), arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe0ff });
+const tracerGeo = new THREE.BoxGeometry(.03, .03, 1).translate(0, 0, -.5), FWD = new THREE.Vector3(0, 0, 1);
+const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5, blending: THREE.AdditiveBlending, transparent: true }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655, blending: THREE.AdditiveBlending, transparent: true }), arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe0ff });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
 
 const r2 = v => Math.round(v * 100) / 100;
@@ -25,7 +27,9 @@ export function projectile(origin, dir, speed, damage, owner = null, visual = fa
   const hostile = !owner;
   // The shooter's own browser already drew its shot, so it is skipped unless echoOwner (turrets).
   if (!visual && isHost()) fxAll({ t: 'shot', o: origin.toArray().map(r2), d: dir.toArray().map(v => Math.round(v * 1e4) / 1e4), s: speed, h: hostile ? 1 : 0, by: owner ? owner.id : -1, k: kind }, owner && !owner.local && !echoOwner ? owner.id : null);
-  const m = new THREE.Mesh(geo('sphere', kind === 'arc' ? .07 : .035, 5, 4), kind === 'arc' ? arcMat : hostile ? hostileMat : bulletMat);
+  // Tracer: a short glowing streak along the flight path (arc bolts stay round).
+  const m = kind === 'arc' ? new THREE.Mesh(geo('sphere', .07, 5, 4), arcMat) : new THREE.Mesh(tracerGeo, hostile ? hostileMat : bulletMat);
+  if (kind !== 'arc') { m.scale.z = Math.min(2.2, speed * .009); m.quaternion.setFromUnitVectors(FWD, dir.clone().normalize()); }
   m.position.copy(origin); G.dynRoot.add(m);
   G.projectiles.push({ pos: origin.clone(), vel: dir.clone().multiplyScalar(speed), damage, hostile, owner, visual, src, faction: src?.faction ?? 'lodestar', kind, life: 1.6, mesh: m });
 }
@@ -66,6 +70,7 @@ export function damageEnemy(e, amount, head = false, attacker = null, opts = {})
     if (attacker) attacker.stats.kills++;
     const at = e.pos.clone().add(new THREE.Vector3(0, e.type.centerY, 0));
     burst(at, 0xc3be9e, 14, 3); fxAll({ t: 'burst', p: at.toArray().map(r2), c: 0xc3be9e, n: 14, pw: 3 });
+    wreck(e); smoke(at, 2, .8);
     feed(e.type.name + ' disabled' + (head ? ' · sensor hit' : ''));
   } else if (head) feed('Sensor hit');
 }
@@ -138,6 +143,7 @@ export function burst(pos, color, count = 7, power = 1) {
 
 function impact(p) {
   burst(p, 0xe3cb9b, 3, 1.4);
+  if (p.y < .3) dust(p, 2); else sparks(p, 3, 0xffd28a, 2.5);
   if (Math.random() < .3) sfxAt(p, 'ricochet', .7, 28, 0);
   if (G.decals.length > 28) { const old = G.decals.shift(); old.removeFromParent(); old.material.dispose(); }
   const m = new THREE.Mesh(geo('sphere', .045, 5, 4), new THREE.MeshBasicMaterial({ color: 0x3e4540 }));
@@ -177,10 +183,10 @@ export function updateProjectiles(dt) {
     }
     if (victim || wall) {
       const h = p.pos.clone().addScaledVector(dir, nearest);
-      if (p.visual) { if (victim && !p.hostile) burst(h, 0xd7c599, 4, 1.3); else if (!victim) impact(wall.point); }
+      if (p.visual) { if (victim && !p.hostile) { burst(h, 0xd7c599, 4, 1.3); sparks(h, 4); } else if (!victim) impact(wall.point); }
       else if (p.hostile && victim?.isEnemy) damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, null, { dir, by: p.src, part: part?.id });
       else if (p.hostile && victim) hurt(victim, p.damage, p.pos);
-      else if (victim) { p.owner.stats.hits++; if (p.kind === 'arc') arcStrike(victim, p.owner, p.damage, head, dir, part); else damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir, part: part?.id }); burst(h, p.kind === 'arc' ? 0x9fe0ff : 0xd7c599, 4, 1.3); }
+      else if (victim) { p.owner.stats.hits++; if (p.kind === 'arc') arcStrike(victim, p.owner, p.damage, head, dir, part); else damageEnemy(victim, p.damage * (head ? 1.55 : 1), head, p.owner, { dir, part: part?.id }); burst(h, p.kind === 'arc' ? 0x9fe0ff : 0xd7c599, 4, 1.3); sparks(h, head ? 7 : 4, p.kind === 'arc' ? 0x9fe0ff : 0xffd28a, 3); }
       else { impact(wall.point); if (wall.mover?.onHit && !p.visual) wall.mover.onHit(p.damage, p.hostile); }
       p.mesh.removeFromParent(); G.projectiles.splice(i, 1); continue;
     }
@@ -238,7 +244,7 @@ export function updateBombs(dt) {
 
 /** The visible and audible part of an explosion (also used by co-op clients). */
 export function explosionFx(p) {
-  burst(p, 0xffc076, 36, 8);
+  burst(p, 0xffc076, 18, 8); blastFx(p);
   const light = new THREE.PointLight(0xffb75a, 10, 15, 2); light.position.copy(p); G.dynRoot.add(light); G.effects.push({ light, life: .14, total: .14 });
   const ring = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb95a, transparent: true, opacity: .3, wireframe: true }));
   ring.position.copy(p); G.dynRoot.add(ring); G.effects.push({ ring, life: .32, total: .32 });

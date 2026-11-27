@@ -42,7 +42,9 @@ export function setVolume(v) { vol.master = v; if (master) master.gain.value = v
 export function setMusicVolume(v) { vol.music = v; if (bus.music) bus.music.gain.value = v; saveVol(); }
 export const volumes = () => ({ ...vol });
 /** Reverb amount for the current space (wide open .08, tunnels and halls up to .45). */
-export function setReverb(wet) { if (bus.wet) bus.wet.gain.setTargetAtTime(wet, audio.currentTime, .3); }
+let verbTarget = .12;
+export function setReverb(wet) { verbTarget = wet; if (bus.wet) bus.wet.gain.setTargetAtTime(wet, audio.currentTime, .3); }
+export const reverbTarget = () => verbTarget;
 
 /** A sound panned left/right (-1..1), e.g. a beacon ping heard from one side. */
 export function soundPanned(kind, level, pan) { sound(kind, level, pan); }

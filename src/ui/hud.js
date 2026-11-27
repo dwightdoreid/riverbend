@@ -1,4 +1,5 @@
 // In-game HUD for the local player: toasts, kill feed, health/ammo, minimap, objective marker.
+import { shake } from '../game/vfx.js';
 import { THREE } from '../engine/three.js';
 import { $, coarse } from '../engine/dom.js';
 import { camera } from '../engine/render.js';
@@ -41,6 +42,7 @@ export function showHit(kill) {
   ui.hitLeft = .15; $('hitmarker').classList.toggle('kill', kill === true); $('hitmarker').classList.toggle('blocked', kill === 'blocked');
 }
 export function showDamage(p, source) {
+  shake(.3);   // runs for the local player on host and clients alike
   ui.damageFlash = .7;
   if (source) { const d = source.clone().sub(p.pos), angle = Math.atan2(d.x, -d.z) + p.yaw; $('damageArrow').style.transform = 'rotate(' + angle + 'rad)'; }
   $('health').textContent = Math.ceil(p.health);

@@ -1,4 +1,5 @@
 // First-person camera and held-weapon model for the local player.
+import { shakeOffset, ejectCasing } from './vfx.js';
 import { THREE } from '../engine/three.js';
 import { box, cyl, rod, mesh, geo, glow } from '../engine/builders.js';
 import { camera, viewCamera, weaponScene } from '../engine/render.js';
@@ -70,6 +71,7 @@ muzzle.rotation.x = -Math.PI / 2; muzzle.visible = false;
 export function updateCamera(p) {
   camera.position.set(p.pos.x, p.eye + (reduced ? 0 : Math.sin(p.bob) * .016 * p.moving), p.pos.z);
   camera.rotation.set(THREE.MathUtils.clamp(p.pitch + p.kick, -1.35, 1.35), p.yaw, 0, 'YXZ');
+  const sh = shakeOffset(); if (sh) { camera.rotation.x += sh.pitch; camera.rotation.y += sh.yaw; camera.position.y += sh.y; }
   camera.fov = 78 - p.aimBlend * (WEAPONS[p.weapon]?.zoom ?? 21); camera.updateProjectionMatrix();
 }
 
@@ -96,3 +98,6 @@ export function updateViewModel(p) {
   muzzle.position.z = pistol ? -.22 : p.weapon === 'shotgun' ? -.74 : p.weapon === 'dmr' ? -.88 : -.78; muzzle.rotation.z = Math.random() * 6;
   viewCamera.fov = 70 - p.aimBlend * 7; viewCamera.updateProjectionMatrix();
 }
+
+/** A spent casing from the current weapon (local player only). */
+export function casing(p) { ejectCasing(weaponScene, p.weapon, gunRig); }
