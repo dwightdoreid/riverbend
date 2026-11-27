@@ -89,6 +89,10 @@ def main():
         check('client joins', host.wait_for(f"{G}.net.roster.length === 2") and client.js(f"{G}.net.myId") == 1,
               host.js(f"JSON.stringify({G}.net.roster)"))
         check('client sees waiting button', client.wait_for("!!document.getElementById('waitBtn')"))
+        host.js("document.querySelector('[data-difficulty=lineman]').click()")
+        check('client follows the host\'s difficulty (picker locked)', client.wait_for(f"{G}.difficulty === 'lineman'") and client.wait_for("document.querySelector('[data-difficulty=lineman]')?.classList.contains('on') && document.querySelector('[data-difficulty=operator]').disabled"), client.js(f"{G}.difficulty"))
+        host.js("document.querySelector('[data-difficulty=operator]').click()")
+        client.wait_for(f"{G}.difficulty === 'operator'")
         check('host deploy button counts squad', 'Deploy squad (2)' in (host.js("document.getElementById('startBtn')?.textContent") or ''))
 
         # Deploy.

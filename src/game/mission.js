@@ -15,6 +15,7 @@ import { resetBlackout, updateBlackout } from './blackout.js';
 import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './switching.js';
 import { setupWeather } from './weather.js';
 import { setupStealth, raiseAlarm } from './stealth.js';
+import { diff } from './difficulty.js';
 import { setupSync, stepPoints, stepGrid, allHeld, syncPoints, loadStep } from './sync.js';
 import { damageEnemy } from './combat.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
@@ -411,9 +412,10 @@ function takeCheckpoint(name = 'Checkpoint') {
     players: G.players.map(p => ({
       pos: [p.pos.x, p.pos.z], yaw: p.yaw, health: p.health, ammo: structuredClone(p.ammo),
       grenades: p.grenades, weapon: p.weapon, lastGun: p.lastGun, flashlight: p.flashlight, turrets: p.turrets, smokes: p.smokes, emps: p.emps,
+      stats: { ...p.stats },   // so medals can't be earned by dying and retrying
     })),
   };
-  for (const p of G.players) p.stims = 1;
+  for (const p of G.players) p.stims = diff().stims;
   feed('Checkpoint · ' + name);
   sound('objective', .5);
   onCheckpoint();   // co-op: players waiting to drop in join now
@@ -437,6 +439,7 @@ function applyCheckpoint(c) {
     p.turrets = Math.max(s.turrets ?? 0, 1) * (G.mission.turrets ? 1 : 0);
     p.smokes = Math.max(s.smokes ?? 0, G.mission.smokes ? 1 : 0);
     p.emps = Math.max(s.emps ?? 0, G.mission.emps ? 1 : 0);
+    if (s.stats) Object.assign(p.stats, s.stats);
   });
   restoreTurrets(c.turrets ?? []);
   if (G.stealth && c.stealth) Object.assign(G.stealth, c.stealth, { waveT: G.mission.stealth?.waves?.every ?? 30 });

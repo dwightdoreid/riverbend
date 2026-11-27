@@ -157,4 +157,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 18 *Redundancy*: shootable mirror nodes against a copy timer; doors reroute and halls purge with halon as each node falls.
      - Done: 19 *Synchronize*: capturable control points, the grid frequency meter with load steps and collapse, and three-way fights on the control floor.
      - Done: 20 *Blackstart*: the LODESTAR Core boss (capacitor shield, arc sweep), Halvard's override port, and the shutdown / restore ending choice. **Campaign complete.**
-5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.
+5. **In progress: Phase 4, polish.**
+   - Done: 4a, difficulty (Recruit / Operator / Lineman) and medals (Swift, Marksman, Untouched, Hardened).
+   - Next: 4b music and audio; 4c effects; 4d mobile performance; 4e balancing (including par times).

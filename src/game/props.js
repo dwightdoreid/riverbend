@@ -203,9 +203,22 @@ const PROP_TYPES = {
     return {
       root, mover, pos: new THREE.Vector3(x, 1.4, z),
       // A door never closes on someone standing in it: it waits until the doorway is clear.
-      setStyle(s) { if (s === 'open') apply(true); else if (!blocked()) apply(false); },
-      update() { if (this.style !== 'open' && !g.visible && !blocked()) apply(false); },
+      // def.lastExit: { room: [x0, z0, x1, z1], others: [door ids] }. When every other door out of
+      // that room is closed, this one stays (or comes back) open while a player is still inside,
+      // so nobody gets sealed in, not even by a checkpoint restore.
+      setStyle(s) { if (s === 'open') apply(true); else if (!blocked() && !trapped()) apply(false); },
+      update() {
+        if (this.style === 'open') return;
+        if (trapped()) { if (g.visible) apply(true); }
+        else if (!g.visible && !blocked()) apply(false);
+      },
     };
+    function trapped() {
+      const L = def.lastExit; if (!L) return false;
+      const [x0, z0, x1, z1] = L.room;
+      return (L.others ?? []).every(id => G.props?.[id]?.style !== 'open')
+        && G.players.some(p => p.alive && p.pos.x >= x0 && p.pos.x <= x1 && p.pos.z >= z0 && p.pos.z <= z1);
+    }
     function apply(open) { g.visible = !open; mover.enabled = !open; lamp.material = open ? openMat : shutMat; }
     function blocked() {
       const near = q => Math.hypot(q.pos.x - x, q.pos.z - z) < w / 2 + 1;

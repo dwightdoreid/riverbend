@@ -1,6 +1,7 @@
 // Player entities. All per-player state lives here so the host can simulate several players.
 // A player is driven by its `input` struct: the local browser fills it from keyboard/touch,
 // and in co-op the host fills remote players' structs from network messages.
+import { diff } from './difficulty.js';
 import { THREE } from '../engine/three.js';
 import { G } from './state.js';
 import { moveBlocked, moverBlocked } from './world.js';
@@ -27,7 +28,7 @@ export function createPlayer({ id, name = 'Operator', local = false }) {
 export function resetPlayer(p, spawn, loadout) {
   p.pos.set(spawn[0], 0, spawn[1]); p.yaw = spawn[2] ?? 0; p.pitch = 0; p.eye = STAND_EYE; p.bob = 0; p.moving = 0; p.sprinting = false;
   p.health = MAX_HEALTH; p.stamina = 100; p.alive = true;
-  p.downed = false; p.bleed = 0; p.respawnAt = 0; p.reviveProgress = 0; p.stims = 1; p.protectUntil = 0;
+  p.downed = false; p.bleed = 0; p.respawnAt = 0; p.reviveProgress = 0; p.stims = diff().stims; p.protectUntil = 0;
   p.loadout = loadout ?? DEFAULT_LOADOUT;
   p.weapon = p.lastGun = p.loadout[0]; p.grenades = MAX_GRENADES;
   for (const [k, w] of Object.entries(WEAPONS)) p.ammo[k] = { mag: w.cap, reserve: w.reserveMax };

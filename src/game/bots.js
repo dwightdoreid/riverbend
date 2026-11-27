@@ -15,6 +15,7 @@ import { walkable, findPath } from './nav.js';
 export const shellHooks = { launch: null };
 import { sfxAt } from './fx.js';
 import { feed } from '../ui/hud.js';
+import { diff } from './difficulty.js';
 
 const glowEye = (color, emissive) => new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity: .9 });
 
@@ -396,7 +397,7 @@ export function menderPatient(e, range) {
 }
 
 /** Co-op scaling: machines get tougher with more players (counts scale in wave events). */
-const hpScale = () => 1 + .4 * (G.players.length - 1);   // same on host and clients (same roster)
+const hpScale = () => (1 + .4 * (G.players.length - 1)) * diff().hp;   // same on host and clients (same roster)
 
 export function spawnEnemies(defs) {
   G.enemies.length = 0;
@@ -487,7 +488,7 @@ export function shootAt(e, aim, dist) {
     e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];
     return;
   }
-  const inaccuracy = dist * T.gun.spread[0] + T.gun.spread[1];
+  const inaccuracy = (dist * T.gun.spread[0] + T.gun.spread[1]) * diff().spread;
   aim.x += (Math.random() - .5) * inaccuracy * 2; aim.y += (Math.random() - .5) * inaccuracy;
   projectile(origin, aim.sub(origin).normalize(), T.gun.speed, T.gun.damage, null, false, false, e);
   e.shot = T.gun.cooldown[0] + Math.random() * T.gun.cooldown[1];

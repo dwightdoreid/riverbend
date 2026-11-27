@@ -1,5 +1,6 @@
 // Game flow: mission select, deploy, pause, resume, checkpoint retry, win/lose.
 // In co-op the host drives the flow and clients follow via network hooks.
+import { earnedMedals } from './medals.js';
 import { G } from './state.js';
 import { initAudio, sound } from '../engine/audio.js';
 import { prepareMission, beginPlay } from './mission.js';
@@ -55,7 +56,7 @@ export function pause() {
 export function finish(won) {
   if (G.status !== 'playing') return;
   G.status = won ? 'won' : 'lost'; G.overlay = false;
-  if (won) recordWin(G.missionIndex, G.mission.id, G.elapsed);
+  if (won) { G.medals = earnedMedals(); G.newMedals = recordWin(G.missionIndex, G.mission.id, G.elapsed, G.medals); }
   if (isHost()) broadcastFinish(won);
   clearInput(); releaseMouse(); showFinish(won); sound('objective');
 }
@@ -87,7 +88,7 @@ net.hooks.onStart = (mi, checkpoint, fresh) => {
 net.hooks.onFinish = won => {
   if (G.status !== 'playing') return;
   G.status = won ? 'won' : 'lost'; G.overlay = false;
-  if (won) recordWin(G.missionIndex, G.mission.id, G.elapsed);
+  if (won) { G.medals = earnedMedals(); G.newMedals = recordWin(G.missionIndex, G.mission.id, G.elapsed, G.medals); }
   clearInput(); releaseMouse(); showFinish(won); sound('objective');
 };
 net.hooks.onLeave = () => {

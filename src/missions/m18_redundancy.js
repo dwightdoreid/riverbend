@@ -6,7 +6,7 @@
 import { HALLS } from '../levels/datahalls.js';
 
 const MARA = 'Mara · Ops', JUNO = 'Juno · Halvard dispatch', LODESTAR = 'LODESTAR';
-const door = (id, x, z, yaw, style = 'closed') => ({ id, type: 'door', at: [x, z], yaw, width: 4, height: 4.2, style });
+const door = (id, x, z, yaw, style = 'closed', lastExit) => ({ id, type: 'door', at: [x, z], yaw, width: 4, height: 4.2, style, lastExit });
 const node = (id, x, z, label) => ({ id, type: 'mirrorNode', at: [x, z], hp: 900, shootable: true, label, onDestroyed: [] });
 const purge = (id, hall) => ({ id, type: 'heatZone', kind: 'halon', rect: HALLS[hall], dps: 22, style: 'off' });
 const purgeIn = (id, hall) => [
@@ -54,7 +54,7 @@ export default {
     door('dW', -12, 20, Math.PI / 2, 'open'),     // atrium <-> west
     door('dN', 0, 8, 0),                           // atrium <-> north
     door('dE', 12, 20, Math.PI / 2),               // atrium <-> east
-    door('dWN', -12, -12, Math.PI / 2),            // west <-> north
+    door('dWN', -12, -12, Math.PI / 2, 'closed', { room: HALLS.west, others: ['dW'] }),   // west <-> north: never leaves anyone sealed in hall W
     door('dNE', 12, -12, Math.PI / 2),             // north <-> east
     node('nodeW', -26, 0, 'W'), node('nodeN', 0, -14, 'N'), node('nodeE', 26, 0, 'E'),
     purge('purgeW', 'west'), purge('purgeN', 'north'), purge('purgeE', 'east'),

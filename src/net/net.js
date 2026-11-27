@@ -187,9 +187,9 @@ export function activateRoster() {
 }
 /** Host: tell clients to load the current mission and start (optionally from the checkpoint). */
 export function sendStart(fresh) {
-  broadcast({ t: 'start', mi: G.missionIndex, cp: fresh ? null : G.checkpoint, roster: net.roster, fresh });
+  broadcast({ t: 'start', mi: G.missionIndex, cp: fresh ? null : G.checkpoint, roster: net.roster, fresh, dif: G.difficulty });
 }
-export function broadcastBrief() { broadcast({ t: 'brief', mi: G.missionIndex, roster: net.roster }); }
+export function broadcastBrief() { broadcast({ t: 'brief', mi: G.missionIndex, roster: net.roster, dif: G.difficulty }); }
 export function broadcastFinish(won) { flush(); broadcast({ t: 'finish', won, ending: G.ending ?? null }); }
 
 /** Host: players waiting to drop in join when a checkpoint is reached. */
@@ -205,7 +205,7 @@ export function onCheckpoint() {
   for (const [id, peer] of waiting) {
     const p = G.players.find(q => q.id === id), spot = freePoint(anchor.pos.x + 1.5, anchor.pos.z + 1.5);
     p.pos.copy(spot); p.netPos = spot.clone(); p.alive = true; p.downed = false; p.health = 100;
-    peer.conn.send({ t: 'start', mi: G.missionIndex, cp: G.checkpoint, roster: net.roster, fresh: false });
+    peer.conn.send({ t: 'start', mi: G.missionIndex, cp: G.checkpoint, roster: net.roster, fresh: false, dif: G.difficulty });
     peer.conn.send({ t: 'fx', l: [{ t: 'tp', x: spot.x, z: spot.z }] });
     feed(peer.name + ' dropped in');
   }
@@ -262,9 +262,9 @@ function onHostMessage(m) {
     net.roster = m.roster;
     if (G.status !== 'briefing' && net.roster.find(r => r.id === net.myId)?.active) syncPlayersToRoster();
     changed();
-  } else if (m.t === 'brief') { net.roster = m.roster; net.hooks.onBrief?.(m.mi); }
+  } else if (m.t === 'brief') { net.roster = m.roster; if (m.dif) G.difficulty = m.dif; net.hooks.onBrief?.(m.mi); }
   else if (m.t === 'start') {
-    net.roster = m.roster; syncPlayersToRoster();
+    net.roster = m.roster; if (m.dif) G.difficulty = m.dif; syncPlayersToRoster();
     net.hooks.onStart?.(m.mi, m.cp, m.fresh);
   } else if (m.t === 'snap') applySnapshot(m);
   else if (m.t === 'fx') m.l.forEach(applyFx);

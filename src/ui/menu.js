@@ -3,9 +3,11 @@ import { $ } from '../engine/dom.js';
 import { G } from '../game/state.js';
 import { timeText, resetHUD } from './hud.js';
 import { CAMPAIGN } from '../missions/index.js';
-import { unlockedCount, bestTime } from '../game/progress.js';
+import { unlockedCount, bestTime, medalsFor } from '../game/progress.js';
+import { DIFFICULTIES, diff, setDifficulty } from '../game/difficulty.js';
+import { MEDALS, parFor } from '../game/medals.js';
 import { deploy, resume, restart, retry, selectMission, nextMission, hasNextMission } from '../game/flow.js';
-import { net, isHost, isClient, inCoop, hostGame, joinGame, leave, onNetChange } from '../net/net.js';
+import { net, isHost, isClient, inCoop, hostGame, joinGame, leave, onNetChange, broadcastBrief } from '../net/net.js';
 
 const transportKind = new URLSearchParams(location.search).get('net') === 'local' ? 'local' : 'peer';
 let lastMenu = null;   // re-render function for the current menu state
@@ -34,6 +36,20 @@ function buttons(list) {
 
 const missionsButton = () => !isClient() && { label: 'Missions', id: 'missionsBtn', onClick: () => toggleMissionList() };
 const coopButton = () => ({ label: inCoop() ? 'Co-op room' + (net.roster.length ? ' (' + net.roster.length + ')' : '') : 'Co-op', id: 'coopBtn', onClick: () => toggleCoop() });
+// Difficulty: a three-way selector on the briefing. The host (or solo player) picks; clients see
+// the host's choice, locked.
+function difficultyPicker() {
+  return '<div class="difficulty" role="radiogroup" aria-label="Difficulty">' + Object.entries(DIFFICULTIES).map(([k, d]) =>
+    '<button role="radio" data-difficulty="' + k + '" aria-checked="' + (G.difficulty === k) + '"' + (isClient() ? ' disabled' : '') + (G.difficulty === k ? ' class="on"' : '') + '>' + d.label + '</button>').join('')
+    + '</div><p class="difficulty-note">' + diff().note + '</p>';
+}
+function bindDifficulty() {
+  for (const el of document.querySelectorAll('[data-difficulty]')) el.onclick = () => { setDifficulty(el.dataset.difficulty); if (isHost()) broadcastBrief(); showBriefing(G.mission); };
+}
+/** A row of medal badges: earned ones lit, new ones flagged. */
+function medalRow(m, earned, fresh = []) {
+  return '<div class="medals">' + MEDALS.map(d => '<div class="medal' + (earned.includes(d.id) ? ' got' : '') + (fresh.includes(d.id) ? ' new' : '') + '"><b>' + d.label + '</b><span>' + d.hint(parFor(m)) + '</span></div>').join('') + '</div>';
+}
 const waitingButton = { label: 'Waiting for host…', primary: true, disabled: true, id: 'waitBtn' };
 
 export function showBriefing(m) {
@@ -44,7 +60,9 @@ export function showBriefing(m) {
   $('menuText').textContent = b.lede;
   $('briefing').innerHTML = '<p>' + b.body + '</p><div class="stages">'
     + b.stages.map(([head, line1, line2]) => '<div class="stage"><strong>' + head + '</strong>' + line1 + '<br>' + line2 + '</div>').join('')
-    + '</div><p>' + b.tip + '</p>';
+    + '</div><p>' + b.tip + '</p>'
+    + difficultyPicker() + medalRow(m, medalsFor(m.id));
+  bindDifficulty();
   if ($('coopPanel').classList.contains('hidden')) $('briefing').classList.remove('hidden');
   $('scorecard').classList.add('hidden');
   lastMenu = () => buttons([
@@ -65,7 +83,8 @@ function toggleMissionList() {
     el.className = 'mission-card' + (locked ? ' locked' : '') + (i === G.missionIndex ? ' current' : '');
     el.dataset.mission = m.id;
     el.innerHTML = '<strong>' + m.number + ' / ' + m.codename + '</strong>' + m.title
-      + '<small>' + (locked ? 'Locked · complete the previous mission' : best !== null ? 'Best ' + timeText(best) : 'Not completed') + '</small>';
+      + '<small>' + (locked ? 'Locked · complete the previous mission' : best !== null ? 'Best ' + timeText(best) : 'Not completed') + '</small>'
+      + (locked ? '' : '<small class="pips">' + MEDALS.map(d => medalsFor(m.id).includes(d.id) ? '◆' : '◇').join('') + '</small>');
     el.disabled = locked;
     el.onclick = () => selectMission(i);
     list.append(el);
@@ -168,7 +187,8 @@ export function showFinish(won) {
     [s.grenades, 'GRENADES THROWN'],
     [(won ? total : G.objective) + ' / ' + total, 'OBJECTIVES'],
   ];
-  $('scorecard').innerHTML = values.map(([v, k]) => '<div><b>' + v + '</b><span>' + k + '</span></div>').join('');
+  $('scorecard').innerHTML = values.map(([v, k]) => '<div><b>' + v + '</b><span>' + k + '</span></div>').join('')
+    + (won ? medalRow(m, G.medals ?? [], G.newMedals ?? []) + '<p class="difficulty-note">Difficulty · ' + diff().label + '</p>' : '');
   $('scorecard').classList.remove('hidden');
   lastMenu = () => {
     if (isClient()) buttons([waitingButton, coopButton()]);

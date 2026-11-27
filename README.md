@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 335 scripted solo checks (missions 01–20 + spawn safety) in headless Chrome
+python3 tools/smoke_test.py                  # 349 scripted solo checks (missions 01–20, phase 4 features + spawn safety) in headless Chrome
 python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m20), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
@@ -186,3 +186,19 @@ step; crouching or cover avoids it. A `controlPoint` with `faction` only counts 
 (Halvard's override port). `{ do: 'win', ending: 'id' }` picks `mission.endings[id]` for the finish
 screen (sent to co-op clients too); `clearEnemies` stands everything down; triggers can watch
 `style: [propId, style]`.
+
+### Difficulty and medals (phase 4a)
+`src/game/difficulty.js`: Recruit / Operator / Lineman scale damage taken, machine health and accuracy,
+and auto-stims per checkpoint. The briefing has the picker; in co-op the host's choice is sent with the
+briefing and start messages. `src/game/medals.js`: Swift (under par, `mission.par` or the PAR table),
+Marksman (50%+ accuracy, 20+ shots), Untouched (under 100 damage), Hardened (won on Lineman). Medals are
+kept in campaign progress and shown on the briefing, the scorecard and the mission list. Checkpoints
+store player stats so a retry can't wipe the damage taken. `&only=p4a` runs these checks alone.
+
+### Loading and doors (fixes)
+- `sw.js`, a tiny service worker, makes every same-origin request revalidate (`cache: 'no-cache'`), so a
+  browser can't pair freshly updated modules with stale cached ones after an update. If loading
+  ever fails, the loading screen shows the underlying error after "Details:".
+- Door props take `lastExit: { room, others }`: when every other door out of `room` is closed, the door
+  stays (or reopens) open while a player is inside, so a reroute or checkpoint restore can't seal
+  anyone in (mission 18's hall W).

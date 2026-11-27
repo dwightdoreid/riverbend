@@ -11,6 +11,7 @@ import { isHost, fxAll, fxTo } from '../net/net.js';
 import { windVec } from './weather.js';
 import { finish } from './flow.js';
 import { damageProp } from './props.js';
+import { diff } from './difficulty.js';
 
 const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 }), arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe0ff });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
@@ -73,6 +74,7 @@ export const BLEED_OUT = 30, RESPAWN_DELAY = 20, REVIVE_HEALTH = 40;
 
 export function hurt(p, amount, source) {
   if (G.status !== 'playing' || !isActive(p) || G.elapsed < G.protectUntil || G.elapsed < p.protectUntil) return;
+  amount *= diff().dmg;
   p.health = Math.max(0, p.health - amount); p.stats.damage += amount;
   sfxFor(p, 'hurt');
   if (p.local) showDamage(p, source);

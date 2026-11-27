@@ -956,11 +956,22 @@ async function mission18() {
   G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
   await click('retryBtn'); godMode(); await frames(3);
   check('retry: west node down, rerouted doors kept', G.props.nodeW.style === 'wrecked' && !G.props.dN.mover.enabled && G.props.dW.mover.enabled && G.objState.collected.size === 1);
+  // Reported bug: being in hall W when the north node falls (or retrying there) sealed you in.
   for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);
   const N = G.props.nodeN, n0 = G.enemies.length;
-  damageProp(N, N.maxHp * .55); await waitSim(.3);
-  check('north node at half -> Linemen', G.fired.has('n-half') && G.enemies.length > n0);
-  damageProp(N, 1e6); teleport(0, 20); await waitSim(.5);
+  teleport(-26, -16);   // in hall W, shooting the north node through the doorway
+  damageProp(N, 1e6); await waitSim(.5);
+  check('north node falls while you\'re in hall W: you are not sealed in', G.props.dW.mover.enabled && !G.props.dWN.mover.enabled, 'dWN shut=' + G.props.dWN.mover.enabled);
+  // Retry from that checkpoint while still in hall W: the exit opens again.
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; G.local.stims = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  await click('retryBtn'); godMode(); await frames(4);
+  check('retry from "North mirror down" in hall W: exit open', G.checkpoint?.name === 'North mirror down' && G.local.pos.x < -12 && !G.props.dWN.mover.enabled, G.local.pos.x.toFixed(1) + ' shut=' + G.props.dWN.mover.enabled);
+  teleport(0, -20); await waitSim(.6);
+  check('...and it seals once everyone is out', G.props.dWN.mover.enabled);
+  for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);
+  const N2 = G.props.nodeN;
+  check('north node down -> Linemen came at half', G.fired.has('n-half') && N2.style === 'wrecked');
+  teleport(0, 20); await waitSim(.5);
   check('north node down -> east opens, north seals', !G.props.dE.mover.enabled && !G.props.dNE.mover.enabled && G.props.dWN.mover.enabled && G.props.dN.mover.enabled, S().objective);
   teleport(26, 10); damageProp(G.props.nodeE, 1e6); await waitSim(.5);
   check('all three down -> back to the atrium', S().objective === 1 && G.checkpoint?.name === 'Mirrors destroyed', S().objective);
@@ -1108,6 +1119,51 @@ async function mission20() {
   check('shut down -> the other ending', S().status === 'won' && /LIGHTS/.test(document.getElementById('menuTitle').innerHTML), document.getElementById('menuEyebrow').textContent);
 }
 
+async function phase4a() {
+  const D = await import('../src/game/difficulty.js'), M = await import('../src/game/medals.js'), P = await import('../src/game/progress.js');
+  const flow = await import('../src/game/flow.js');
+  flow.selectMission(0); await frames(3);
+  const pick = k => document.querySelector('[data-difficulty="' + k + '"]');
+  check('difficulty defaults to Operator', G.difficulty === 'operator' && pick('operator')?.classList.contains('on'));
+  pick('lineman').click(); await frames(2);
+  check('pick Lineman (saved, note shown)', G.difficulty === 'lineman' && pick('lineman').classList.contains('on') && localStorage.getItem('riverbend.difficulty') === 'lineman' && /No stims/.test(document.getElementById('briefing').textContent));
+  await click('startBtn'); await frames(3);
+  const s = G.enemies.find(e => e.type.name === 'Sentry');
+  check('Lineman: tougher machines, no stims', Math.abs(s.maxHp - s.type.hp * 1.25) < .01 && G.local.stims === 0, s.maxHp + ' stims=' + G.local.stims);
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 10, null);
+  check('Lineman: damage taken x1.4', Math.abs(G.local.health - 86) < .01, G.local.health);
+  D.setDifficulty('recruit'); flow.selectMission(0); await frames(3); await click('startBtn'); await frames(3);
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 10, null);
+  check('Recruit: damage x0.6, two stims', Math.abs(G.local.health - 94) < .01 && G.local.stims === 2, G.local.health + ' stims=' + G.local.stims);
+
+  // Medal rules.
+  const set = (st, t, d) => { Object.assign(G.local.stats, st); G.elapsed = t; G.difficulty = d; };
+  set({ shots: 40, hits: 24, damage: 60 }, 200, 'lineman');
+  check('all four medals', M.earnedMedals().join() === 'swift,marksman,untouched,hardened', M.earnedMedals().join());
+  set({ shots: 10, hits: 10, damage: 150 }, 900, 'operator');
+  check('slow, too few shots, hurt: no medals', M.earnedMedals().length === 0, M.earnedMedals().join());
+  check('recordWin returns only new medals', P.recordWin(0, 'mtest', 100, ['swift']).join() === 'swift' && P.recordWin(0, 'mtest', 90, ['swift', 'marksman']).join() === 'marksman' && P.medalsFor('mtest').length === 2);
+
+  // A real win shows the medal row on the scorecard and pips on the mission list.
+  D.setDifficulty('operator'); flow.selectMission(0); await frames(3); await click('startBtn'); await frames(3);
+  Object.assign(G.local.stats, { shots: 30, hits: 20, damage: 0 }); G.elapsed = 100;
+  const before = P.medalsFor('m01').filter(x => ['swift', 'marksman', 'untouched'].includes(x)).length;   // a full run already won m01
+  flow.finish(true); await frames(3);
+  const card = document.getElementById('scorecard');
+  check('scorecard shows medals; new ones flagged', card.querySelectorAll('.medal').length === 4 && card.querySelectorAll('.medal.got').length === 3 && card.querySelectorAll('.medal.new').length === 3 - before, card.querySelectorAll('.medal.got').length + ' new ' + card.querySelectorAll('.medal.new').length + ' had ' + before);
+  await click('missionsBtn'); await frames(2);
+  check('mission list shows medal pips', /◆◆◆◇/.test(document.querySelector('[data-mission="m01"] .pips')?.textContent), document.querySelector('[data-mission="m01"] .pips')?.textContent);
+
+  // Checkpoints keep stats, so medals can't be farmed by dying after a checkpoint.
+  flow.selectMission(0); await frames(3); await click('startBtn'); await frames(3);
+  G.local.stats.damage = 77; G.local.stats.shots = 9;
+  const mm = await import('../src/game/mission.js'); mm.runEvents([{ do: 'checkpoint', name: 'test' }]);
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; G.local.stims = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  await click('retryBtn'); await frames(3);
+  check('retry from a checkpoint keeps stats', G.local.stats.shots === 9 && G.local.stats.damage >= 77, JSON.stringify(G.local.stats));
+  D.setDifficulty('operator');
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -1115,7 +1171,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20, p4a: phase4a };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -1146,6 +1202,7 @@ async function run() {
   await mission18();
   await mission19();
   await mission20();
+  await phase4a();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
