@@ -19,8 +19,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 316 scripted solo checks (missions 01–19 + spawn safety) in headless Chrome
-python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m19), much faster
+python3 tools/smoke_test.py                  # 335 scripted solo checks (missions 01–20 + spawn safety) in headless Chrome
+python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m20), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
@@ -67,7 +67,7 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker, caverns, datahalls, control) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker, caverns, datahalls, control, corechamber) and reusable pieces (kit.js).
                       Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
@@ -177,3 +177,12 @@ players standing in a ring capture it, machines alone in it take it back (raider
 into points instead of shooting them). Objective `capture` completes when all are held; `sync` runs
 the grid frequency (it sags for every point not held) and only progresses inside the band. The
 `loadStep` event dips the frequency. Logic in `src/game/sync.js`; the meter is synced to co-op clients.
+
+### Finale and endings (mission 20)
+The `core` boss (LODESTAR Core) is stationary (`fixed: true` spawns it exactly in place, even on its
+own solid plinth): four capacitor parts power a shield; with all four down the core is exposed, then it
+recharges stronger. Its arc sweep runs on the shared clock (`coreBeam(t)`), so co-op clients draw it in
+step; crouching or cover avoids it. A `controlPoint` with `faction` only counts that faction's machines
+(Halvard's override port). `{ do: 'win', ending: 'id' }` picks `mission.endings[id]` for the finish
+screen (sent to co-op clients too); `clearEnemies` stands everything down; triggers can watch
+`style: [propId, style]`.

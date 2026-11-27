@@ -152,7 +152,7 @@ export function showPause() {
 }
 
 export function showFinish(won) {
-  const m = G.mission, r = won ? m.success : m.failure, p = G.local, s = p.stats, total = m.objectives.length;
+  const m = G.mission, r = won ? (m.endings?.[G.ending] ?? m.success) : m.failure, p = G.local, s = p.stats, total = m.objectives.length;
   const kills = G.players.reduce((n, q) => n + q.stats.kills, 0);
   showScreen();
   $('coopPanel').classList.add('hidden');

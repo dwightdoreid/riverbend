@@ -134,27 +134,27 @@ There are 13 environments, and some are reused with different lighting or layout
    - enemy scaling
    - dropping in at checkpoints
    - a team health panel
-4. **Phase 3, content in batches:** each new mission brings one new mechanic.
+4. **Done: Phase 3, content in batches (all 20 missions):** each new mission brings one new mechanic.
    - **Done: Act I (missions 01–05).**
      - 03 *Switchback*: escort and the SG-8 shotgun.
      - 04 *Hold Fast*: turrets, generators and survive waves.
      - 05 *Spillway*: the Bulwark, doors, the Spillway Warden boss, and the Halvard reveal.
-   - **In progress: Act II, *Load Shed*, in Port Calder.**
+   - **Done: Act II, *Load Shed*, in Port Calder.**
      - Done: 06 *Brownout*: rolling blackouts, the Spotter, the DMR-14, and Juno's evidence.
      - Done: 07 *Undercurrent*: tunnels, Lineman ceiling ambushes, smoke grenades, flooded zones and a timed escape.
      - Done: 08 *Live Wire*: the switching puzzle with interlocks and arc flash, live zones that hurt machines too, and the mimic board.
      - Done: 09 *Last Train*: elevated viaduct, train escort with powered sections, station boarding hold, and the first sighting of Halvard drones.
      - Done: 10 *Ironwalker*: the knee/core boss with kneel-and-recover phases, the Tallymen, and factions with three-way fights. **Act II complete.**
-   - **In progress: Act III, *Islanding*, on the northern frontier.**
+   - **Done: Act III, *Islanding*, on the northern frontier.**
      - Done: 11 *Gale Line*: wind, lightning and rain, the ARC-3 carbine, and spinning turbines.
      - Done: 12 *Three-Way*: the uplink objective, relays that are knocked offline and rebooted, and three-way fights over the ridge.
      - Done: 13 *Static*: the EMP HUD with stereo objective pings, beacon landmarks, the Arc lobber and its electric fields, and EMP grenades.
      - Done: 14 *Cold Iron*: snow, the Hauler with its rear weak spot, and battery wagons shunted onto the train.
      - Done: 15 *Black Box*: stealth (cameras, detection, alarm waves), takedowns, suppressed pistol. Act III complete.
-   - **In progress: Act IV, *Blackstart*.**
+   - **Done: Act IV, *Blackstart*.**
      - Done: 16 *Cold Start*: the LR-40 launcher and a staged blackstart (diesel, fuel gas, turbine, sync) where tripped machines stall progress.
      - Done: 17 *Heat Sink*: cooling caverns, cycling steam vents, a superheated gallery cooled by bypass valves, and Repair drones.
      - Done: 18 *Redundancy*: shootable mirror nodes against a copy timer; doors reroute and halls purge with halon as each node falls.
      - Done: 19 *Synchronize*: capturable control points, the grid frequency meter with load steps and collapse, and three-way fights on the control floor.
-     - Next: 20 *Blackstart*: the LODESTAR core boss while Halvard's override assault breaks in, and the ending choice.
+     - Done: 20 *Blackstart*: the LODESTAR Core boss (capacitor shield, arc sweep), Halvard's override port, and the shutdown / restore ending choice. **Campaign complete.**
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

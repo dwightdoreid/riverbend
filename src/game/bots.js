@@ -369,7 +369,8 @@ export function addEnemy(def, alertAt = null) {
   const rotors = T.build(g, bodyMat);
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
   const cone = G.env.dark ? makeCone(T) : null; if (cone) g.add(cone);
-  const home = freePoint(...def.at), patrol = freePoint(...(def.patrol ?? def.at));
+  // def.fixed: spawn exactly here even inside solids (a stationary boss standing on its own plinth).
+  const home = def.fixed ? new THREE.Vector3(def.at[0], 0, def.at[1]) : freePoint(...def.at), patrol = def.fixed ? home.clone() : freePoint(...(def.patrol ?? def.at));
   const e = {
     id: i, def, type: T, isEnemy: true, faction: def.faction ?? T.faction ?? 'lodestar', g, mat: bodyMat, rotors, cone, pos: home.clone(), home, patrol, dest: patrol.clone(),
     hp: T.hp * hpScale(), maxHp: T.hp * hpScale(), yaw: Math.PI * (i % 2), state: 'patrol', timer: 0, lastKnown: new THREE.Vector3(), memory: 0,

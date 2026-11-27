@@ -253,6 +253,145 @@ ENEMY_TYPES.ironwalker = {
   },
 };
 
+// LODESTAR Core: the final boss. Stationary in the middle of its chamber.
+//  - A shield powered by four capacitor pylons soaks everything. Shoot the glowing capacitors;
+//    with all four down the shield drops and the core is exposed for a few seconds.
+//  - Then it recharges the capacitors (a little stronger each time) and fights harder.
+//  - Arc sweep: a beam at chest height that sweeps the chamber on a shared clock (so co-op
+//    clients draw it in step). Crouch under it or put something solid in the way.
+//  - Arc shells that leave electric fields, and a shock pulse against anyone hugging the core.
+const CAP = 320, CAPS = { capN: [0, -7], capE: [7, 0], capS: [0, 7], capW: [-7, 0] };
+const BEAM = { period: 16, warn: 1.5, fire: 8, speed: .5, y: 1.3, len: 34, dps: 48 };
+/** Beam state on the shared clock: { phase: 'warn' | 'fire' | 'idle', angle }. */
+export function coreBeam(t) {
+  const cycle = Math.floor(t / BEAM.period), u = t - cycle * BEAM.period, dir = cycle % 2 ? -1 : 1;
+  return { phase: u < BEAM.warn ? 'warn' : u < BEAM.fire ? 'fire' : 'idle', angle: dir * t * BEAM.speed };
+}
+function capDown(e, id) {
+  const [x, z] = CAPS[id], at = e.pos.clone().add(new THREE.Vector3(x, 3, z));
+  explosionFx(at); fxAll({ t: 'boom', p: [r2(at.x), r2(at.y), r2(at.z)] });
+  const left = Object.values(e.caps).filter(h => h > 0).length;
+  feed('Capacitor destroyed · ' + left + ' left');
+  if (!left) {
+    e.exposed = true; e.exposeTimer = Math.max(6, 10 - e.phase);
+    radio('Mara · Ops', 'Shield\'s down! The core is open. Everything you have!');
+  }
+}
+
+ENEMY_TYPES.core = {
+  name: 'LODESTAR Core', boss: true, hp: 4800, color: 0x2a3a46, weakLabel: 'SHIELD DOWN', faction: 'lodestar',
+  hover: 0, bob: 0, eyeY: 6, muzzle: [0, 9, 0], centerY: 6,
+  hitParts: [
+    { y: 6, r: 2.5, head: false },
+    ...Object.entries(CAPS).map(([id, [x, z]]) => ({ id, y: 3.2, r: .95, x, z })),
+  ],
+  speed: { patrol: 0, search: 0, close: 0, retreat: 0, strafe: 0 },
+  sight: { stand: 80, crouch: 80, crouchStill: 80, fov: -1 },
+  range: { far: 99, near: 0 }, strafeSwap: 9,
+  gun: { speed: 0, damage: 0, cooldown: [9, 0], spread: [0, 0], sound: 'arc' },
+
+  status: e => e.exposed ? '' : ' · capacitors ' + Object.values(e.caps ?? CAPS).filter(h => typeof h !== 'number' || h > 0).length + '/4',
+  partAlive: (e, id) => (e.caps?.[id] ?? 1) > 0,
+  onHit(e, amount, opts, head) {
+    e.caps ??= Object.fromEntries(Object.keys(CAPS).map(k => [k, CAP]));
+    if (e.exposed) return opts.explosive ? amount * .5 : amount;
+    if (opts.part && e.caps[opts.part] > 0) {
+      e.caps[opts.part] -= amount;
+      if (e.caps[opts.part] <= 0) capDown(e, opts.part);
+      return 'absorbed';
+    }
+    if (opts.explosive) {                                   // blasts near the plinth rattle every capacitor a little
+      for (const id of Object.keys(e.caps)) if (e.caps[id] > 0) { e.caps[id] -= amount * .25; if (e.caps[id] <= 0) capDown(e, id); }
+      return 'absorbed';
+    }
+    return 0;                                               // the shield
+  },
+
+  build(g, bodyMat) {
+    const coreMat = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, emissive: 0x3fa8ff, emissiveIntensity: 1.2 });
+    const shield = new THREE.MeshBasicMaterial({ color: 0x7fd0ff, transparent: true, opacity: .12, depthWrite: false, side: THREE.DoubleSide });
+    cyl(g, 0, 1, 0, 3.6, 4, 2, bodyMat, 24);                                      // plinth
+    mesh(g, geo('sphere', 2.2, 24, 18), coreMat, 0, 6, 0);
+    const rings = [];
+    for (let i = 0; i < 3; i++) { const r = mesh(g, geo('torus', 3 + i * .45, .09, 8, 40), new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x3fa8ff, emissiveIntensity: 1.4 }), 0, 6, 0); rings.push(r); }
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; rod(g, [Math.cos(a) * 3.4, 2, Math.sin(a) * 3.4], [Math.cos(a) * 1.4, 4.6, Math.sin(a) * 1.4], .14, 'dark', 6); }
+    const bubble = mesh(g, geo('sphere', 3.9, 24, 16), shield, 0, 6, 0);
+    const caps = {};
+    for (const [id, [x, z]] of Object.entries(CAPS)) {
+      cyl(g, x, 1.4, z, .5, .7, 2.8, 'edge', 10);
+      const m = new THREE.MeshStandardMaterial({ color: 0x9fe0ff, emissive: 0x5fc4ff, emissiveIntensity: 2 });
+      mesh(g, geo('sphere', .8, 14, 10), m, x, 3.2, z); caps[id] = m;
+      rod(g, [x, 3.6, z], [x * .3, 5.6, z * .3], .06, 'steel', 5);                 // feed lines to the core
+    }
+    const beamMat = new THREE.MeshBasicMaterial({ color: 0xbfeaff, transparent: true, opacity: .8, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(.25, .25, BEAM.len), beamMat); beam.geometry.translate(0, 0, -BEAM.len / 2 - 2.5);
+    const pivot = new THREE.Group(); pivot.position.y = BEAM.y; pivot.add(beam); g.add(pivot);
+    Object.assign(g.userData, { coreMat, rings, bubble, caps, beam, beamMat, pivot });
+    return [];
+  },
+
+  pose(e) {
+    const u = e.g.userData, t = G.elapsed;
+    u.rings.forEach((r, i) => { r.rotation.x = t * (.4 + i * .3); r.rotation.y = t * (.3 - i * .2); });
+    u.bubble.visible = !e.exposed;
+    u.coreMat.emissiveIntensity = e.exposed ? 3 + Math.sin(t * 16) : 1.2 + Math.sin(t * 2) * .3;
+    for (const [id, m] of Object.entries(u.caps)) m.emissiveIntensity = (e.caps?.[id] ?? 1) > 0 ? 1.6 + Math.sin(t * 6) * .5 : 0;
+    const b = coreBeam(t), on = !e.exposed && b.phase !== 'idle' && G.status === 'playing';
+    u.beam.visible = on; u.pivot.rotation.y = b.angle;
+    if (on) { const fire = b.phase === 'fire'; u.beam.scale.set(fire ? 1.6 : .35, fire ? 1.6 : .35, 1); u.beamMat.opacity = fire ? .85 : .35 + Math.sin(t * 20) * .2; u.beamMat.color.setHex(fire ? 0xbfeaff : 0xff6a5a); }
+  },
+
+  update(e, dt, from) {
+    if (isClient()) return;
+    e.caps ??= Object.fromEntries(Object.keys(CAPS).map(k => [k, CAP])); e.phase ??= 1; e.yaw = 0;
+    const victims = G.players.filter(isActive);
+    e.visible = victims.some(p => los(from, eyeOf(p))); e.state = e.visible ? 'engage' : 'search';
+    if (e.exposed) {
+      e.exposeTimer -= dt;
+      if (e.exposeTimer <= 0) {
+        e.exposed = false; e.phase++;
+        const hp = CAP * (1 + .15 * (e.phase - 1));
+        e.caps = Object.fromEntries(Object.keys(CAPS).map(k => [k, hp]));
+        radio('LODESTAR', 'CAPACITORS RECHARGED. YOU WILL NOT SWITCH ME OFF.', 4);
+        for (const at of [[-24, -14], [24, -14]]) addEnemy({ type: 'skimmer', at }, e.pos.clone());
+        if (e.phase >= 3) addEnemy({ type: 'sentry', at: [0, 24] }, e.pos.clone());
+      }
+      return;                                                // venting: no attacks while exposed
+    }
+    // Arc sweep (host applies the damage; everyone draws it from the same clock).
+    const b = coreBeam(G.elapsed);
+    e.beamTick = (e.beamTick ?? 0) - dt;
+    if (b.phase === 'fire' && e.beamTick <= 0 && G.elapsed > G.protectUntil + .5) {
+      e.beamTick = .2;
+      const dir = new THREE.Vector3(-Math.sin(b.angle), 0, -Math.cos(b.angle)), origin = e.pos.clone().setY(BEAM.y);
+      for (const p of victims) {
+        if (p.crouched) continue;                            // duck under it
+        const rel = p.pos.clone().setY(BEAM.y).sub(origin), along = rel.dot(dir);
+        if (along < 2 || along > BEAM.len + 2.5) continue;
+        if (rel.clone().addScaledVector(dir, -along).length() > .8) continue;
+        if (!los(origin.clone().addScaledVector(dir, 5.2), p.pos.clone().setY(BEAM.y))) continue;   // cover blocks it (start outside the plinth)
+        hurt(p, BEAM.dps * .2, origin); sfxAt(p.pos, 'arc', .8, 30);
+      }
+    }
+    // Arc shells.
+    e.mortarTimer = (e.mortarTimer ?? 5) - dt;
+    if (e.mortarTimer <= 0 && victims.length) {
+      e.mortarTimer = e.phase >= 3 ? 3.5 : e.phase === 2 ? 4.5 : 5.5;
+      const v = victims[Math.floor(Math.random() * victims.length)];
+      launchShell(e.pos.clone().setY(9), v.pos.clone().add(new THREE.Vector3((Math.random() - .5) * 3, 0, (Math.random() - .5) * 3)), 'arc', e);
+    }
+    // Shock pulse against anyone hugging the plinth.
+    e.stompCd = (e.stompCd ?? 2) - dt;
+    if (e.stompCd <= 0 && victims.some(p => p.pos.distanceTo(e.pos) < 8.5)) {
+      e.stompCd = 3;
+      arcBolts([e.pos.clone().setY(2), ...[0, 1, 2, 3, 4, 5].map(i => e.pos.clone().add(new THREE.Vector3(Math.cos(i) * 8, .4, Math.sin(i) * 8)))]);
+      fxAll({ t: 'arc', pts: [[r2(e.pos.x), 2, r2(e.pos.z)], ...[0, 2, 4].map(i => [r2(e.pos.x + Math.cos(i) * 8), .4, r2(e.pos.z + Math.sin(i) * 8)])] });
+      for (const p of victims) { const d = p.pos.distanceTo(e.pos); if (d < 8.5) hurt(p, 10 + 20 * (1 - d / 8.5), e.pos); }
+      feed('The core discharges!');
+    }
+  },
+};
+
 // ---------------------------------------------------------------- mortar shells and warning rings
 
 const FLIGHT = 1.5, GRAVITY = 12, BLAST = 4.5;

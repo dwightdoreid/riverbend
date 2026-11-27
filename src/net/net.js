@@ -190,7 +190,7 @@ export function sendStart(fresh) {
   broadcast({ t: 'start', mi: G.missionIndex, cp: fresh ? null : G.checkpoint, roster: net.roster, fresh });
 }
 export function broadcastBrief() { broadcast({ t: 'brief', mi: G.missionIndex, roster: net.roster }); }
-export function broadcastFinish(won) { flush(); broadcast({ t: 'finish', won }); }
+export function broadcastFinish(won) { flush(); broadcast({ t: 'finish', won, ending: G.ending ?? null }); }
 
 /** Host: players waiting to drop in join when a checkpoint is reached. */
 export function onCheckpoint() {
@@ -268,7 +268,7 @@ function onHostMessage(m) {
     net.hooks.onStart?.(m.mi, m.cp, m.fresh);
   } else if (m.t === 'snap') applySnapshot(m);
   else if (m.t === 'fx') m.l.forEach(applyFx);
-  else if (m.t === 'finish') net.hooks.onFinish?.(m.won);
+  else if (m.t === 'finish') { G.ending = m.ending ?? null; net.hooks.onFinish?.(m.won); }
   else if (m.t === 'full') { net.status = 'That game is full (4 players).'; changed(); }
   else if (m.t === 'bye') leave();
 }

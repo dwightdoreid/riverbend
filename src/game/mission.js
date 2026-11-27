@@ -81,6 +81,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupWeather();
   setupStealth();
   setupSync();
+  G.ending = null;
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
   G.players.forEach((p, i) => {
@@ -206,6 +207,7 @@ export function objectiveText() {
   const pts = () => syncPoints().map(p => (p.label ?? p.id) + ({ held: ' ●', lost: ' ✕' }[p.style] ?? ' ○')).join('  ');
   if (o.type === 'capture') sub = (o.sub ? o.sub + ' · ' : '') + pts();
   if (o.type === 'sync' && G.grid) sub = 'Sync ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + G.grid.f.toFixed(2) + ' Hz · ' + pts();
+  if (o.watch && G.props[o.watch]) { const q = G.props[o.watch]; sub += ' · ' + (q.label ?? q.id) + ' ' + (q.cap >= .99 ? 'SECURE' : Math.round((1 - q.cap) / 2 * 100) + '% OVERRIDDEN'); }
   if (o.type === 'switching') sub = Object.keys(G.mission.switching.breakers).map(id => id + (isClosed(id) ? ' ●' : ' ○')).join('   ') + (o.sub ? ' · ' + o.sub : '');
   if (o.timeLimit) {
     const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
@@ -334,7 +336,9 @@ const EVENTS = {
   alarm: ev => raiseAlarm(ev.reason ?? 'Intrusion detected'),
   loadStep: ev => { loadStep(ev.amount ?? .3); if (ev.feed) feed(ev.feed); },
   giveTurrets: ev => { for (const p of G.players) p.turrets = (p.turrets ?? 0) + (ev.count ?? 1); feed('+' + (ev.count ?? 1) + ' turret' + ((ev.count ?? 1) > 1 ? 's' : '') + ' each'); updateHUD(); },
-  win: () => finish(true),
+  win: ev => { if (ev.ending) G.ending = ev.ending; finish(true); },
+  // Everything still standing stands down (e.g. Halvard's teams retreat at the end).
+  clearEnemies: () => { for (const e of G.enemies) if (!e.dead) { e.dead = true; e.g.visible = false; } },
   fail: () => finish(false),
 };
 
@@ -372,6 +376,7 @@ const CONDITIONS = {
   breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
   enemyHp: ([tag, frac]) => G.enemies.some(e => e.def.tag === tag && (e.dead || e.hp <= e.maxHp * frac)),
   collected: n => G.objState.collected.size >= n,
+  style: ([id, style]) => G.props[id]?.style === style,
   propHp: ([id, frac]) => !!G.props[id]?.maxHp && G.props[id].hp <= G.props[id].maxHp * frac,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
   escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,

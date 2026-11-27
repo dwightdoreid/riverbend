@@ -21,7 +21,7 @@ const PROP_TYPES = {
     box(root, x, 1.16, z + .15, .8, .08, .5, 'edge'); cyl(root, x, .12, z, .65, .65, .18, 'edge', 12);
     return {
       root, pos: new THREE.Vector3(x, 1.45, z),
-      setStyle(s) { screen.material = styles[s]; },
+      setStyle(s) { screen.material = styles[s] ?? styles.amber; },
       update(t, i) { screen.material.emissiveIntensity = .6 + Math.sin(t * 3 + i) * .2; },
     };
   },
@@ -549,7 +549,7 @@ const PROP_TYPES = {
     const tag = sign(root, x, 2.7, z, def.label ?? def.id, .9, .5); void tag;
     block(x, z, .9, .9); addSolid(x - .45, 0, z - .45, x + .45, 1.8, z + .45);
     const prop = {
-      root, pos: new THREE.Vector3(x, 1, z), r, cap: 0, occupy: true,
+      root, pos: new THREE.Vector3(x, 1, z), r, cap: 0, occupy: true, faction: def.faction ?? null,
       setStyle(s) {
         if (s === 'held' && prop.cap < 1) prop.cap = 1; if (s === 'lost' && prop.cap > -1) prop.cap = -1;
         const c = cols[s] ?? cols.neutral; ringMat.color.setHex(c); lampMat.color.setHex(c); lampMat.emissive.setHex(c);

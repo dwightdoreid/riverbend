@@ -24,7 +24,7 @@ export function stepPoints(dt) {
   for (const p of syncPoints()) {
     const inside = q => Math.hypot(q.pos.x - p.pos.x, q.pos.z - p.pos.z) < p.r;
     const players = G.players.filter(q => isActive(q) && inside(q)).length;
-    const machines = G.enemies.filter(e => !e.dead && (e.elev ?? 0) < 1 && inside(e)).length;
+    const machines = G.enemies.filter(e => !e.dead && (e.elev ?? 0) < 1 && (!p.faction || e.faction === p.faction) && inside(e)).length;
     p.contested = players > 0 && machines > 0;
     const before = p.style;
     if (players && !machines) p.cap = Math.min(1, p.cap + dt / CAPTURE_S);
@@ -33,7 +33,7 @@ export function stepPoints(dt) {
     const next = p.cap >= 1 ? 'held' : p.cap <= -1 ? 'lost' : before === 'held' && p.cap < 0 ? 'neutral' : before === 'lost' && p.cap > 0 ? 'neutral' : before;
     if (next !== before) {
       p.setStyle(next);
-      feed('Control point ' + (p.label ?? p.id) + (next === 'held' ? ' secured' : next === 'lost' ? ' LOST' : ' contested'));
+      feed((p.faction ? '' : 'Control point ') + (p.label ?? p.id) + (next === 'held' ? ' secured' : next === 'lost' ? ' LOST' : p.faction ? ' under attack!' : ' contested'));
     }
   }
 }

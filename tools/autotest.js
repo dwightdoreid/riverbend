@@ -1036,6 +1036,78 @@ async function mission19() {
   check('two points lost -> grid collapses (mission failed)', S().status === 'lost' && G.grid.collapsed, S().status + ' ' + G.grid.f.toFixed(2));
 }
 
+async function mission20() {
+  await goNext(20);
+  check('mission 20: core chamber', S().status === 'briefing' && S().mission === 'm20' && G.level.id === 'corechamber', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) if (!e.type.boss) { e.dead = true; e.g.visible = false; }
+  const core = G.enemies.find(e => e.def.tag === 'core'), bar = () => document.getElementById('bossName').textContent;
+  check('boss bar: LODESTAR Core, capacitors 4/4', /LODESTAR Core · capacitors 4\/4/.test(bar()), bar());
+
+  // Shield: core hits are blocked; capacitor hits count.
+  const from = new THREE.Vector3(0, 6, 20);
+  let hp = core.hp; projectile(from, new THREE.Vector3(0, 6, 0).sub(from).normalize(), 240, 31, G.local); await frames(4);
+  check('shielded core shrugs off rounds', core.hp === hp, (hp - core.hp).toFixed(0));
+  const capS = new THREE.Vector3(0, 3.2, 7), f2 = new THREE.Vector3(0, 3.2, 16);
+  projectile(f2, capS.clone().sub(f2).normalize(), 240, 31, G.local); await frames(4);
+  check('capacitor takes the hit', core.caps.capS < 320 && core.hp === hp, core.caps.capS + ' dead=' + core.dead + ' exp=' + core.exposed + ' n=' + G.enemies.filter(e => e.def.tag === 'core').length + ' same=' + (core === G.enemies.find(e => e.def.tag === 'core' && !e.dead)));
+  for (const id of ['capN', 'capE', 'capS']) damageEnemy(core, 400, false, G.local, { part: id });
+  await frames(2); check('three capacitors down: shield holds', !core.exposed && /capacitors 1\/4/.test(bar()), bar());
+  damageEnemy(core, 400, false, G.local, { part: 'capW' }); await frames(2);
+  check('all four down: core exposed', core.exposed && document.getElementById('bossBar').classList.contains('exposed'));
+  hp = core.hp; projectile(from, new THREE.Vector3(0, 6, 0).sub(from).normalize(), 240, 31, G.local); await frames(4);
+  check('exposed core takes full damage', Math.abs(hp - core.hp - 31) < .5, (hp - core.hp).toFixed(1));
+  core.exposeTimer = .1; await waitSim(.4);
+  check('shield recharges, stronger', !core.exposed && core.phase === 2 && core.caps.capN > 320, core.caps.capN);
+
+  // The arc sweep: standing in it hurts, crouching under it doesn't.
+  const { coreBeam, clearBossFx } = await import('../src/game/bosses.js');
+  for (let i = 0; i < 3000 && coreBeam(G.elapsed).phase !== 'warn'; i++) await frames(1);   // the start of a fresh sweep
+  for (let i = 0; i < 3000 && coreBeam(G.elapsed).phase !== 'fire'; i++) await frames(1);
+  const inBeam = () => { const a = coreBeam(G.elapsed).angle; G.local.pos.set(-Math.sin(a) * 13, 0, -Math.cos(a) * 13); };
+  core.mortarTimer = 99; core.stompCd = 99; clearBossFx();   // only the beam for this check
+  for (const e of G.enemies) if (!e.dead && !e.type.boss) damageEnemy(e, 1e6, false, G.local);   // the recharge called Skimmers
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; G.local.crouched = false;
+  G.simSteps = 1; await waitSim(.8, inBeam);
+  const burned = 100 - G.local.health;
+  G.local.health = 100; G.local.crouched = true;
+  await waitSim(.8, () => { inBeam(); G.local.crouched = true; });
+  G.simSteps = 6;
+  check('the sweep burns standing players; crouching ducks it', burned > 10 && G.local.health === 100 && coreBeam(G.elapsed).phase === 'fire', burned.toFixed(0) + ' vs ' + (100 - G.local.health).toFixed(0));
+  G.local.crouched = false; godMode(); teleport(0, 30);
+
+  // Halvard's override team: alone on the port it gets overridden; a player standing there stops it.
+  const port = G.props.port;
+  damageEnemy(core, core.hp - core.maxHp * .84, false, G.local, { explosive: true });   // straight through: core exposed? use hp directly
+  core.hp = core.maxHp * .84; await waitSim(.3);
+  check('core at 85%: Halvard breach', G.fired.has('breach1') && G.enemies.some(e => !e.dead && e.faction === 'halvard'));
+  for (const e of G.enemies) if (!e.dead && e.faction === 'halvard') damageEnemy(e, 1e6, false, G.local);
+  for (const e of G.enemies) if (!e.dead && !e.type.boss) damageEnemy(e, 1e6, false, G.local);
+  const tm = addEnemy({ type: 'tallyman', at: [0, -12] }); tm.hp = tm.maxHp = 1e9; tm.home.copy(tm.pos);   // LODESTAR's Skimmers would hunt it tm.patrol.copy(tm.pos); tm.dest.copy(tm.pos);
+  G.env.sightScale = .001; await waitSim(4, () => tm.pos.set(0, 0, -12));
+  check('Tallyman on the port: being overridden', port.cap < .5 && /OVERRIDDEN/.test(document.getElementById('objectiveSub').textContent), port.cap.toFixed(2));
+  teleport(1.5, -12); const c1 = port.cap; await waitSim(1, () => tm.pos.set(0, 0, -12));
+  check('player on the port: contested, override stalls', port.contested && Math.abs(port.cap - c1) < .02);
+  teleport(0, 30); await waitSim(12, () => tm.pos.set(0, 0, -12));
+  check('port lost -> Halvard overloads the core (fail)', S().status === 'lost', S().status + ' ' + port.style + ' cap=' + port.cap.toFixed(2) + ' tm dead=' + tm.dead + ' hp=' + Math.round(tm.hp) + ' at ' + tm.pos.x.toFixed(1) + ',' + tm.pos.z.toFixed(1));
+  G.env.sightScale = 1;
+
+  // Retry and finish it: core down, Halvard retreats, choose.
+  await click(document.getElementById('retryBtn') ? 'retryBtn' : 'restartBtn'); godMode(); await frames(3);
+  const core2 = G.enemies.find(e => e.def.tag === 'core' && !e.dead);
+  damageEnemy(core2, 1e6, false, G.local, { part: 'capN' }); for (const id of ['capE', 'capS', 'capW']) damageEnemy(core2, 1e6, false, G.local, { part: id });
+  damageEnemy(core2, 1e7, false, G.local); await waitSim(.6);
+  check('core destroyed -> the choice; everything stands down', S().objective === 1 && G.enemies.every(e => e.dead) && G.checkpoint?.name === 'Core offline', S().objective);
+  check('override can no longer fail the mission', !G.fired.has('overload'));
+  teleport(4, 14.6, Math.PI); await holdE(3.3); await waitSim(3.5);
+  check('restore -> campaign complete (restore ending)', S().status === 'won' && /NEW TERMS/.test(document.getElementById('menuTitle').innerHTML) && !document.getElementById('nextBtn'), document.getElementById('menuEyebrow').textContent);
+  await click('replayBtn'); godMode(); await frames(3);
+  const core3 = G.enemies.find(e => e.def.tag === 'core'); for (const id of ['capN', 'capE', 'capS', 'capW']) damageEnemy(core3, 1e6, false, G.local, { part: id });
+  damageEnemy(core3, 1e7, false, G.local); await waitSim(.6);
+  teleport(-4, 14.6, Math.PI); await holdE(3.3); await waitSim(3.5);
+  check('shut down -> the other ending', S().status === 'won' && /LIGHTS/.test(document.getElementById('menuTitle').innerHTML), document.getElementById('menuEyebrow').textContent);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -1043,7 +1115,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -1073,6 +1145,7 @@ async function run() {
   await mission17();
   await mission18();
   await mission19();
+  await mission20();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
