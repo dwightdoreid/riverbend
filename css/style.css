@@ -95,3 +95,13 @@ body.emp #static{display:block;animation:staticFlicker .18s steps(2) infinite}
 /* Superheated air: an orange shimmer over the view */
 #heatTint{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,120,40,.15) 0%,rgba(255,90,20,.55) 70%,rgba(200,50,10,.8) 100%);mix-blend-mode:screen;transition:opacity .2s}
 #heatTint.halon{background:radial-gradient(ellipse at center,rgba(200,230,255,.2) 0%,rgba(170,210,240,.55) 70%,rgba(120,170,220,.8) 100%)}
+
+/* Grid frequency meter (mission 19) */
+#freqMeter{position:absolute;top:122px;left:50%;transform:translateX(-50%);display:none;min-width:230px;padding:7px 12px 8px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(10,20,26,.78);text-align:center;color:#e8eef0}
+#freqMeter.on{display:block}
+#freqMeter b{font:700 18px/1 ui-monospace,Menlo,monospace;letter-spacing:.04em}
+#freqMeter .scale{position:relative;height:8px;margin:6px 0 4px;border-radius:4px;background:linear-gradient(90deg,#c8452c 0%,#e0a33a 30%,#2c3a40 42%,#2c3a40 58%,#e0a33a 70%,#c8452c 100%)}
+#freqMeter .band{position:absolute;left:42%;width:16%;top:-2px;bottom:-2px;border:1px solid #5ce08a;border-radius:3px}
+#freqMeter #freqNeedle{position:absolute;top:-4px;width:3px;height:16px;margin-left:-1.5px;background:#fff;border-radius:2px;left:50%}
+#freqMeter small{font-size:10px;letter-spacing:.14em;color:#9fb3ba}
+#freqMeter.out b{color:var(--amber)} #freqMeter.danger b{color:var(--red)} #freqMeter.danger{animation:alarmBlink .6s steps(2) infinite}

@@ -139,6 +139,15 @@ export function updateUI(dt) {
       soundPanned('radio', Math.max(.15, 1 - d / 90), Math.sin(rel));
     }
   }
+  const fm = $('freqMeter'), gr = G.grid;
+  fm.classList.toggle('on', !!gr?.active);
+  if (gr?.active) {
+    const dev = gr.f - 50, danger = gr.f < 49.1;
+    $('freqHz').textContent = gr.f.toFixed(2) + ' Hz';
+    $('freqNeedle').style.left = Math.max(0, Math.min(100, 50 + dev / 1.25 * 50)) + '%';     // scale spans ±1.25 Hz
+    $('freqState').textContent = danger ? 'UNDER-FREQUENCY · GRID AT RISK' : gr.inBand ? 'IN SYNC' : 'OUT OF SYNC';
+    fm.classList.toggle('out', !gr.inBand && !danger); fm.classList.toggle('danger', danger);
+  }
   const sp = $('stealthPill'), st = G.stealth;
   sp.classList.toggle('on', !!st);
   if (st) {

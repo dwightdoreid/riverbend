@@ -32,7 +32,8 @@ const S = () => window.riverbendGame.state();
 // ?only=mNN runs just that mission's checks (jumping straight to its briefing).
 const ONLY = new URLSearchParams(location.search).get('only');
 async function goNext(n) {
-  if (ONLY) { const flow = await import('../src/game/flow.js'); flow.selectMission(n - 1); await frames(3); }
+  // Full runs click Next; if the previous mission's checks ended on a failure screen, jump instead.
+  if (ONLY || !document.getElementById('nextBtn')?.offsetParent) { const flow = await import('../src/game/flow.js'); flow.selectMission(n - 1); await frames(3); }
   else await click('nextBtn');
 }
 const godMode = () => { G.local.health = 1e6; };
@@ -834,6 +835,8 @@ async function mission16() {
   check('pressure builds at half rate with one machine down', Math.abs(half / full - .5) < .12, (half / full).toFixed(2));
   G.objState.hold = 18.1; await waitSim(.3);
   check('lobber wave during the pressure build', G.fired.has('gas-lobber'));
+  for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);   // raiders could trip a machine just as we jump
+  for (const id of ['diesel', 'compressor']) { G.props[id].setStyle('running'); G.props[id].hp = G.props[id].maxHp; }
   G.objState.hold = 39.9; await waitSim(.5);
   check('fuel gas up -> checkpoint', S().objective === 5 && G.checkpoint?.name === 'Fuel gas up', S().objective);
 
@@ -970,6 +973,69 @@ async function mission18() {
   check('copy completes -> mission failed', S().status === 'lost', S().status);
 }
 
+async function mission19() {
+  await goNext(19);
+  check('mission 19: grid control floor', S().status === 'briefing' && S().mission === 'm19' && G.level.id === 'control', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }
+  const P = G.props, meter = document.getElementById('freqMeter');
+  check('meter hidden until syncing', !meter.classList.contains('on'));
+
+  // Capture by standing in the ring; machines alone in it take it back; both = contested.
+  teleport(-28, 3); await waitSim(5.5);
+  check('standing in a ring captures it', P.cpW.style === 'held', P.cpW.style + ' ' + P.cpW.cap.toFixed(2));
+  const squatter = addEnemy({ type: 'sentry', at: [-28, -1] }); squatter.home.copy(squatter.pos); squatter.patrol.copy(squatter.pos); squatter.dest.copy(squatter.pos);
+  G.env.sightScale = .001; const c0 = P.cpW.cap; await waitSim(1, () => teleport(-28, 3));
+  check('player + machine inside: contested, no change', P.cpW.contested && Math.abs(P.cpW.cap - c0) < .01);
+  teleport(-12, 20); await waitSim(6.5, () => squatter.pos.set(-28, 0, -1));
+  check('a machine alone in it: held -> neutral', P.cpW.style === 'neutral', P.cpW.style + ' ' + P.cpW.cap.toFixed(2));
+  await waitSim(6.5, () => squatter.pos.set(-28, 0, -1));
+  check('...then lost', P.cpW.style === 'lost', P.cpW.style);
+  damageEnemy(squatter, 1e6, false, G.local); G.env.sightScale = 1;
+  teleport(-28, 3); await waitSim(10.5);
+  teleport(0, -1); await waitSim(5.5);
+  teleport(28, 3); await waitSim(5.5);
+  check('all three held -> sync + checkpoint', S().objective === 1 && G.checkpoint?.name === 'Floor secured', S().objective);
+  await frames(2); for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);   // the sync wave would take points while we test
+  await waitSim(2);
+  check('frequency meter shows 50 Hz in sync', meter.classList.contains('on') && /50\.0\d Hz/.test(document.getElementById('freqHz').textContent) && G.objState.hold > 1.5, document.getElementById('freqHz').textContent + ' ' + G.objState.hold.toFixed(1));
+
+  // A lost point: frequency sags, progress stops.
+  P.cpE.setStyle('lost'); let h0 = G.objState.hold; await waitSim(4);
+  check('one point lost: frequency sags, sync stalls', G.grid.f < 49.85 && G.objState.hold - h0 < .3 && meter.classList.contains('out'), G.grid.f.toFixed(2));
+  teleport(28, 3); await waitSim(10.5); teleport(0, 16); await waitSim(6.5);
+  check('retaken: back in band', P.cpE.style === 'held' && G.grid.inBand, G.grid.f.toFixed(2) + ' ' + ['cpW', 'cpC', 'cpE'].map(k => P[k].style + ':' + P[k].cap.toFixed(2)).join(' ') + ' alive=' + G.enemies.filter(e => !e.dead).map(e => e.type.name + '@' + e.pos.x.toFixed(0) + ',' + e.pos.z.toFixed(0)).join(';'));
+
+  // Load step: an island joins and the frequency dips, then recovers.
+  G.fired.delete('step1'); G.objState.hold = 11.9; await waitSim(.2);
+  check('island joins -> frequency dip', G.fired.has('step1') && G.grid.f < 49.8, G.grid.f.toFixed(2));
+  await waitSim(4);
+  check('...and the governors pull it back', G.grid.inBand, G.grid.f.toFixed(2));
+
+  // Raiders walk into the points rather than shooting from afar.
+  for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);
+  G.env.sightScale = .001; teleport(0, 24);
+  const r = addEnemy({ type: 'sentry', at: [8, -12], harass: ['cpW', 'cpC', 'cpE'] });
+  await waitSim(6);
+  check('a raider walks into the nearest point and contests it', Math.hypot(r.pos.x - P.cpC.pos.x, r.pos.z - P.cpC.pos.z) < P.cpC.r && P.cpC.cap < 1, Math.hypot(r.pos.x - P.cpC.pos.x, r.pos.z - P.cpC.pos.z).toFixed(1) + ' m, cap ' + P.cpC.cap.toFixed(2));
+  damageEnemy(r, 1e6, false, G.local); G.env.sightScale = 1;
+  for (const p of ['cpW', 'cpC', 'cpE']) P[p].setStyle('held');
+  for (const id of ['halvard', 'step2', 'half', 'heavy', 'step3']) G.fired.add(id);   // skip the remaining waves for this jump
+  G.grid.f = 50; G.objState.hold = 79.9; await waitSim(.5);
+  check('synchronised -> tie-line breaker', S().objective === 2 && G.checkpoint?.name === 'Islands synchronised' && !meter.classList.contains('on'), S().objective);
+  teleport(0, 14, Math.PI); await holdE(2.8); await waitSim(3);
+  check('tie-line closed -> mission won', S().status === 'won', S().status);
+
+  // Replay and lose two points during sync: under-frequency collapse.
+  await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }
+  for (const p of ['cpW', 'cpC', 'cpE']) G.props[p].setStyle('held');
+  await waitSim(.5); teleport(0, 24);
+  G.props.cpW.setStyle('lost'); G.props.cpE.setStyle('lost');
+  G.simSteps = 10; await waitSim(35); G.simSteps = 6;
+  check('two points lost -> grid collapses (mission failed)', S().status === 'lost' && G.grid.collapsed, S().status + ' ' + G.grid.f.toFixed(2));
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -977,7 +1043,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -1006,6 +1072,7 @@ async function run() {
   await mission16();
   await mission17();
   await mission18();
+  await mission19();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

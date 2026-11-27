@@ -13,5 +13,6 @@ import office from './office.js';
 import peaker from './peaker.js';
 import caverns from './caverns.js';
 import datahalls from './datahalls.js';
+import control from './control.js';
 
-export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard, snowYard, galeline, ridge, office, peaker, caverns, datahalls].map(l => [l.id, l]));
+export const LEVELS = Object.fromEntries([riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard, snowYard, galeline, ridge, office, peaker, caverns, datahalls, control].map(l => [l.id, l]));

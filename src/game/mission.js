@@ -15,6 +15,7 @@ import { resetBlackout, updateBlackout } from './blackout.js';
 import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './switching.js';
 import { setupWeather } from './weather.js';
 import { setupStealth, raiseAlarm } from './stealth.js';
+import { setupSync, stepPoints, stepGrid, allHeld, syncPoints, loadStep } from './sync.js';
 import { damageEnemy } from './combat.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
 import { resetPlayer, healPlayer, resupplyPlayer, needsAmmo, isActive, MAX_HEALTH } from './players.js';
@@ -79,6 +80,7 @@ export function prepareMission(mission, checkpoint = null) {
   setupSwitching();
   setupWeather();
   setupStealth();
+  setupSync();
   spawnPickups(mission.pickups ?? []);
   spawnEnemies(mission.enemies ?? []);
   G.players.forEach((p, i) => {
@@ -173,6 +175,7 @@ const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 export function objectiveTargets(o = currentObjective()) {
   if (!o) return [];
   if (o.type === 'collect' || o.type === 'destroy') return o.targets.filter(t => !G.objState.collected.has(t));
+  if (o.type === 'capture' || o.type === 'sync') { const ids = syncPoints().filter(p => p.style !== 'held').map(p => p.id); return ids.length ? ids : syncPoints().map(p => p.id); }
   if (o.type === 'uplink') { const down = o.targets.filter(t => G.props[t].style !== (o.onlineStyle ?? 'online')); return down.length ? down : o.targets; }
   return o.target ? [o.target] : [];
 }
@@ -200,6 +203,9 @@ export function objectiveText() {
     sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
   }
   if (o.type === 'uplink') sub = (o.gauge ?? 'Uplink') + ' ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + o.targets.map(id => (G.props[id].label ?? id) + (G.props[id].style === (o.onlineStyle ?? 'online') ? ' ●' : ' ○')).join('  ');
+  const pts = () => syncPoints().map(p => (p.label ?? p.id) + ({ held: ' ●', lost: ' ✕' }[p.style] ?? ' ○')).join('  ');
+  if (o.type === 'capture') sub = (o.sub ? o.sub + ' · ' : '') + pts();
+  if (o.type === 'sync' && G.grid) sub = 'Sync ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + G.grid.f.toFixed(2) + ' Hz · ' + pts();
   if (o.type === 'switching') sub = Object.keys(G.mission.switching.breakers).map(id => id + (isClosed(id) ? ' ●' : ' ○')).join('   ') + (o.sub ? ' · ' + o.sub : '');
   if (o.timeLimit) {
     const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
@@ -255,7 +261,13 @@ export function updateObjective(dt) {
     if (G.objState.t >= o.timeLimit && !G.objState.timedOut) { G.objState.timedOut = true; runEvents(o.onTimeout ?? [{ do: 'fail' }]); if (G.status !== 'playing') return; }
   }
   const alive = G.players.filter(isActive);
-  if (o.type === 'reach') {
+  if (G.mission.sync) stepPoints(dt);
+  if (o.type === 'capture') {
+    if (allHeld()) completeObjective(alive[0] ?? G.local);
+  } else if (o.type === 'sync') {
+    if (stepGrid(o, dt)) G.objState.hold += dt;
+    if (G.status === 'playing' && G.objState.hold >= o.time) { G.grid.active = false; completeObjective(alive[0] ?? G.local); }
+  } else if (o.type === 'reach') {
     const p = alive.find(q => flat(q.pos, posOf(o.target)) < (o.radius ?? 3));
     if (p) completeObjective(p);
   } else if (o.type === 'hold') {
@@ -320,6 +332,7 @@ const EVENTS = {
   },
   checkpoint: ev => takeCheckpoint(ev.name),
   alarm: ev => raiseAlarm(ev.reason ?? 'Intrusion detected'),
+  loadStep: ev => { loadStep(ev.amount ?? .3); if (ev.feed) feed(ev.feed); },
   giveTurrets: ev => { for (const p of G.players) p.turrets = (p.turrets ?? 0) + (ev.count ?? 1); feed('+' + (ev.count ?? 1) + ' turret' + ((ev.count ?? 1) > 1 ? 's' : '') + ' each'); updateHUD(); },
   win: () => finish(true),
   fail: () => finish(false),
@@ -354,7 +367,7 @@ const CONDITIONS = {
   time: t => G.elapsed >= t,
   enter: ([x, z, r]) => G.players.some(p => isActive(p) && Math.hypot(p.pos.x - x, p.pos.z - z) < r),
   near: ([prop, r]) => G.players.some(p => isActive(p) && flat(p.pos, posOf(prop)) < r),
-  hold: t => ['hold', 'survive', 'uplink'].includes(currentObjective()?.type) && G.objState.hold >= t,
+  hold: t => ['hold', 'survive', 'uplink', 'sync'].includes(currentObjective()?.type) && G.objState.hold >= t,
   destroyed: ([ids, n]) => ids.filter(id => G.props[id]?.style === 'wrecked').length >= n,
   breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
   enemyHp: ([tag, frac]) => G.enemies.some(e => e.def.tag === tag && (e.dead || e.hp <= e.maxHp * frac)),

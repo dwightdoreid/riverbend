@@ -155,5 +155,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 16 *Cold Start*: the LR-40 launcher and a staged blackstart (diesel, fuel gas, turbine, sync) where tripped machines stall progress.
      - Done: 17 *Heat Sink*: cooling caverns, cycling steam vents, a superheated gallery cooled by bypass valves, and Repair drones.
      - Done: 18 *Redundancy*: shootable mirror nodes against a copy timer; doors reroute and halls purge with halon as each node falls.
-     - Next: 19 *Synchronize*: hold control points to keep the rebuilt grid in sync; a frequency meter drops when a point is lost.
+     - Done: 19 *Synchronize*: capturable control points, the grid frequency meter with load steps and collapse, and three-way fights on the control floor.
+     - Next: 20 *Blackstart*: the LODESTAR core boss while Halvard's override assault breaks in, and the ending choice.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

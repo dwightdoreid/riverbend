@@ -236,6 +236,8 @@ function snapshot() {
     tu: G.turrets.filter(t => !t.dead).map(t => [t.id, r2(t.pos.x), r2(t.pos.z), r2(t.yaw), t.ammo]),
     ph: Object.fromEntries(Object.values(G.props).filter(p => p.maxHp).map(p => [p.id, [Math.ceil(p.hp), Math.ceil(p.maxHp)]])),
     tl: G.players.map(p => [p.id, p.turrets ?? 0]),
+    fq: G.grid ? [r2(G.grid.f), G.grid.active ? 1 : 0, G.grid.inBand ? 1 : 0] : null,
+    pc: Object.values(G.props).filter(p => p.occupy).map(p => [p.id, r2(p.cap), p.contested ? 1 : 0]),
     sl: G.stealth ? [r2(G.stealth.meter), G.stealth.alarm ? 1 : 0, G.stealth.seenBy] : null,
   };
 }
@@ -304,6 +306,8 @@ function applySnapshot(s) {
   syncBombVisuals(s.bo);
   if (s.es && G.escort) { [G.escort.s, G.escort.hp, G.escort.status] = s.es; poseEscort(); }
   syncTurretVisuals(s.tu ?? []);
+  if (s.fq && G.grid) { G.grid.f = s.fq[0]; G.grid.active = !!s.fq[1]; G.grid.inBand = !!s.fq[2]; }
+  for (const [id, cap, con] of s.pc ?? []) if (G.props[id]) { G.props[id].cap = cap; G.props[id].contested = !!con; }
   if (s.sl && G.stealth) { G.stealth.meter = s.sl[0]; G.stealth.alarm = !!s.sl[1]; G.stealth.seenBy = s.sl[2]; }
   for (const [id, [hp, max]] of Object.entries(s.ph ?? {})) if (G.props[id]) { G.props[id].hp = hp; G.props[id].maxHp = max; }
   const mine = (s.tl ?? []).find(([id]) => id === G.local.id);

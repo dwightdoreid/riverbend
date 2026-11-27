@@ -471,7 +471,7 @@ function harassTarget(e) {
   let best = null, bd = Infinity;
   for (const id of ids) {
     const p = G.props[id];
-    if (!p || !p.root.visible || isDown(p)) continue;
+    if (!p || !p.root.visible || isDown(p) || (p.occupy && p.style === 'lost')) continue;
     const d = flatDist(p.pos, e.pos); if (d < bd) { best = p; bd = d; }
   }
   return best;
@@ -577,6 +577,11 @@ export function updateBots(dt) {
     } else if (harassTarget(e)) {
       // Escort raiders go for the vehicle when no player is in sight.
       const prop = harassTarget(e), dist = flatDist(e.pos, prop.pos);
+      if (prop.occupy) {
+        // Control points: walk in and stand on it (sync.js counts who is inside).
+        if (dist > 1.8) navigate(e, prop.pos, T.speed.close, dt); else e.yaw += dt * .6;
+        poseEnemy(e, dt); continue;
+      }
       if (dist > 13) navigate(e, prop.pos, T.speed.close, dt);
       else { e.timer += dt; if (e.timer > T.strafeSwap) { e.dodge *= -1; e.timer = 0; } botMove(e, new THREE.Vector3(Math.cos(e.yaw) * e.dodge, 0, -Math.sin(e.yaw) * e.dodge).add(e.pos), T.speed.strafe * .6, dt); }
       if (dist < 26) {

@@ -1,7 +1,7 @@
 // Interactive mission props and pickups, created from mission data.
 // Every prop has a `style` (its visual state) that events change and checkpoints restore.
 import { THREE } from '../engine/three.js';
-import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
+import { box, cyl, rod, geo, mesh, glowMats, sign } from '../engine/builders.js';
 import { G } from './state.js';
 import { addMover, block, addSolid } from './world.js';
 import { sound } from '../engine/audio.js';
@@ -533,6 +533,37 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Grid control point: a console pylon inside a floor ring. Players stand in it to capture it;
+  // machines standing in it with no player present take it back (sync.js). Styles 'neutral',
+  // 'held', 'lost'. prop.cap runs -1 (lost) .. 1 (held); the ring arc shows it.
+  controlPoint(parent, def) {
+    const [x, z] = def.at, r = def.r ?? 4.5, root = new THREE.Group(); parent.add(root);
+    const cols = { neutral: 0xb8c0c4, held: 0x5ce08a, lost: 0xff5a3a };
+    const ringMat = new THREE.MeshBasicMaterial({ color: cols.neutral, transparent: true, opacity: .55, side: THREE.DoubleSide, fog: false });
+    const ring = new THREE.Mesh(new THREE.RingGeometry(r - .18, r, 48), ringMat); ring.rotation.x = -Math.PI / 2; ring.position.set(x, .05, z); root.add(ring);
+    const arcMat = new THREE.MeshBasicMaterial({ color: cols.held, transparent: true, opacity: .8, side: THREE.DoubleSide, fog: false });
+    const arc = new THREE.Mesh(new THREE.RingGeometry(r - .5, r - .25, 48, 1, 0, Math.PI * 2), arcMat); arc.rotation.x = -Math.PI / 2; arc.position.set(x, .06, z); root.add(arc);
+    box(root, x, .9, z, .9, 1.8, .9, 'edge'); box(root, x, 1.6, z + .46, .7, .5, .03, 'dark');
+    const lampMat = new THREE.MeshStandardMaterial({ color: cols.neutral, emissive: cols.neutral, emissiveIntensity: 1.4 });
+    box(root, x, 2.05, z, .5, .3, .5, lampMat);
+    const tag = sign(root, x, 2.7, z, def.label ?? def.id, .9, .5); void tag;
+    block(x, z, .9, .9); addSolid(x - .45, 0, z - .45, x + .45, 1.8, z + .45);
+    const prop = {
+      root, pos: new THREE.Vector3(x, 1, z), r, cap: 0, occupy: true,
+      setStyle(s) {
+        if (s === 'held' && prop.cap < 1) prop.cap = 1; if (s === 'lost' && prop.cap > -1) prop.cap = -1;
+        const c = cols[s] ?? cols.neutral; ringMat.color.setHex(c); lampMat.color.setHex(c); lampMat.emissive.setHex(c);
+      },
+      update(t) {
+        const k = prop.cap;
+        arc.visible = Math.abs(k) > .01; arcMat.color.setHex(k > 0 ? cols.held : cols.lost);
+        arc.geometry.dispose(); arc.geometry = new THREE.RingGeometry(r - .5, r - .25, 32, 1, Math.PI / 2, Math.PI * 2 * Math.min(1, Math.abs(k)) * (k > 0 ? -1 : 1));
+        if (prop.contested) ringMat.opacity = .35 + Math.abs(Math.sin(t * 8)) * .5; else ringMat.opacity = .55;
+      },
+    };
+    return prop;
+  },
+
   // A superheated passage: hot haze and glowing floor whose strength is the fraction of
   // def.valves still closed. heat.js scalds players inside it on the host.
   heatZone(parent, def) {
@@ -607,7 +638,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold', vent: 'active', valve: 'closed', heatZone: 'on', mirrorNode: 'copying' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold', vent: 'active', valve: 'closed', heatZone: 'on', mirrorNode: 'copying', controlPoint: 'neutral' };
 
 export function spawnProps(defs) {
   G.props = {};
