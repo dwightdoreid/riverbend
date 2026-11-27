@@ -247,7 +247,7 @@ export const ENEMY_TYPES = {
     range: { far: 24, near: 8 }, strafeSwap: 3,
     gun: { speed: 50, damage: 22, cooldown: [2.2, .6], spread: [.012, .15], sound: 'blast' },
     armor(e, head, dir, explosive) {
-      if (explosive) return .5;
+      if (explosive) return explosive === 'he' ? 1 : .5;     // launcher rounds are made for this
       if (!dir) return .15;
       const fwd = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw));
       return dir.x * fwd.x + dir.z * fwd.z > .35 ? 1.6 : .15;     // round travelling the way it faces = hit in the back

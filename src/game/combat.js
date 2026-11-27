@@ -47,7 +47,7 @@ export function damageEnemy(e, amount, head = false, attacker = null, opts = {})
     amount = rest;
   }
   // Armour hook: shields and boss plating scale damage by hit location and direction.
-  if (e.type.armor) amount *= e.type.armor(e, head, opts.dir ?? null, !!opts.explosive);
+  if (e.type.armor) amount *= e.type.armor(e, head, opts.dir ?? null, opts.explosive || false);   // 'he' = launcher round
   if (amount <= 0) {
     if (attacker?.local) { showHit('blocked'); sound('reload', .5); }
     else if (attacker) fxTo(attacker.id, { t: 'hit', kill: 'blocked' });
@@ -185,12 +185,32 @@ export function updateProjectiles(dt) {
   }
 }
 
+/** Distance from point c to segment a-b. */
+function segDist(a, b, c) {
+  const ab = b.clone().sub(a), t = THREE.MathUtils.clamp(c.clone().sub(a).dot(ab) / Math.max(1e-9, ab.lengthSq()), 0, 1);
+  return a.clone().addScaledVector(ab, t).distanceTo(c);
+}
+
 export function updateBombs(dt) {
   for (let i = G.bombs.length - 1; i >= 0; i--) {
     const b = G.bombs[i];
-    b.fuse -= dt; b.vel.y -= 12 * dt;
-    if (b.pos.y > .3) b.vel.addScaledVector(windVec(), dt * .9);   // wind pushes grenades in flight
+    const he = b.kind === 'he';
+    b.fuse -= dt; b.vel.y -= (he ? 5 : 12) * dt;
+    if (b.pos.y > .3 && !he) b.vel.addScaledVector(windVec(), dt * .9);   // wind pushes grenades in flight
     const delta = b.vel.clone().multiplyScalar(dt), len = delta.length(), hit = len > 0 ? castSolid(b.pos, delta.clone().normalize(), len + .085) : null;
+    if (he) {
+      // Launcher round: bursts on impact (wall, ground or a machine) once it has flown far enough to arm.
+      const armed = b.pos.distanceTo(b.start) > 4;
+      const next = b.pos.clone().add(delta);
+      const struck = G.enemies.find(e => !e.dead && segDist(b.pos, next, e.pos.clone().setY(e.elev > 1 ? e.elev : e.type.centerY)) < Math.max(...e.type.hitParts.map(q => q.r)) + .2);
+      if (hit || struck || next.y < .05 || b.fuse <= 0) {
+        if (hit) b.pos.copy(hit.point).addScaledVector(delta.clone().normalize(), -.15); else b.pos.copy(next);
+        if (armed) explode(b); else { burst(b.pos, 0x8a8a80, 6, 2); sfxAt(b.pos, 'reload', .6, 20); b.g.removeFromParent(); }
+        G.bombs.splice(i, 1); continue;
+      }
+      b.pos.copy(next); b.g.position.copy(b.pos); b.g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.vel.clone().normalize());
+      continue;
+    }
     if (hit) {
       const normal = new THREE.Vector3(0, 1, 0);
       if (hit.box) {
@@ -313,17 +333,17 @@ function explode(b) {
     for (const e of G.enemies) if (!e.dead && e.pos.distanceTo(b.pos) < EMP_R) { stun(e, 4.5); damageEnemy(e, 10, false, b.owner, { explosive: true }); }
     alertNoise(b.pos, 20); b.g.removeFromParent(); return;
   }
-  const p = b.pos.clone(), radius = 8, lift = p.clone().add(new THREE.Vector3(0, .18, 0));
+  const he = b.kind === 'he', radius = he ? 6 : 8, p = b.pos.clone(), lift = p.clone().add(new THREE.Vector3(0, he ? .4 : .18, 0));
   explosionFx(p); fxAll({ t: 'boom', p: p.toArray().map(r2) });
   for (const e of G.enemies) {
     if (e.dead) continue;
     const target = e.pos.clone().add(new THREE.Vector3(0, e.elev > 1 ? e.elev - e.type.centerY : e.type.centerY, 0)), d = target.distanceTo(p);
-    if (d < radius && los(lift, target)) damageEnemy(e, 150 * (1 - d / radius), false, b.owner, { explosive: true });
+    if (d < radius && los(lift, target)) damageEnemy(e, (he ? 210 : 150) * (1 - d / radius * (he ? .7 : 1)), false, b.owner, { explosive: he ? 'he' : true });
   }
   for (const pl of G.players) {
     if (!isActive(pl)) continue;
     const eye = eyeOf(pl), d = eye.distanceTo(p);
-    if (d < radius && los(lift, eye)) hurt(pl, 115 * (1 - d / radius), p);
+    if (d < radius && los(lift, eye)) hurt(pl, (he ? 95 : 115) * (1 - d / radius), p);
   }
   alertNoise(p, 55);
   b.g.removeFromParent();

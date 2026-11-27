@@ -32,6 +32,13 @@ function gunModel(type) {
     rod(g, [0, .03, -.15], [0, .03, -.6], .025, 'dark', 8);
     box(g, 0, .13, -.05, .05, .07, .2, coil);
     box(g, 0, -.17, .08, .08, .22, .1, 'edge').rotation.x = -.3;
+  } else if (type === 'launcher') {
+    cyl(g, 0, .02, -.2, .05, .05, .58, 'green', 12).rotation.x = Math.PI / 2;           // barrel tube
+    cyl(g, 0, .02, -.5, .058, .058, .05, 'dark', 12).rotation.x = Math.PI / 2;
+    cyl(g, 0, -.01, .1, .075, .075, .15, 'dark', 8).rotation.x = Math.PI / 2;             // cylinder
+    box(g, 0, -.05, .3, .1, .15, .26, 'edge'); box(g, 0, -.17, .12, .08, .2, .1, 'edge').rotation.x = -.3;
+    box(g, 0, -.1, -.3, .06, .16, .08, 'dark').rotation.x = .3;                           // foregrip
+    box(g, 0, .13, -.12, .03, .08, .02, 'steel'); box(g, 0, .12, .05, .05, .05, .02, glow);   // leaf sight
   } else if (type === 'dmr') {
     box(g, 0, 0, .02, .11, .15, .42, 'dark');                                   // receiver
     rod(g, [0, .03, -.2], [0, .03, -.86], .02, 'dark', 10);                     // long barrel
@@ -54,7 +61,7 @@ function gunModel(type) {
   }
   g.traverse(o => { if (o.isMesh) o.castShadow = false; });
 }
-['rifle', 'pistol', 'spistol', 'shotgun', 'dmr', 'arc', 'grenade'].forEach(gunModel);
+['rifle', 'pistol', 'spistol', 'shotgun', 'dmr', 'arc', 'launcher', 'grenade'].forEach(gunModel);
 
 const flashMat = new THREE.MeshBasicMaterial({ color: 0xffdca1, transparent: true, opacity: .9, depthTest: false });
 const muzzle = mesh(gunRig, geo('cone', .075, .23, 5), flashMat, 0, .03, -.79);

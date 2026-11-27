@@ -403,8 +403,9 @@ async function mission07() {
   const rate = Math.abs(G.local.pos.x - x0) / (G.elapsed - t0);
   check('wading through the flood is slow', rate > 1.5 && rate < 2.8, rate.toFixed(2) + ' m/s (dry: 4.2)');
 
-  for (const [x, z] of [[-21, 10.4], [13, 17], [-15.5, -23]]) { teleport(x, z); await holdE(2.6); }
-  check('three feeders cut -> checkpoint', S().objective === 1 && G.checkpoint?.name === 'Feeders cut' && G.props.cableA.style === 'cut', S().objective + ' ' + G.checkpoint?.name);
+  const seen = [];
+  for (const [x, z] of [[-21, 10.4], [13, 17], [-15.5, -23]]) { teleport(x, z); G.simSteps = 1; await frames(2); seen.push(G.local.interaction?.type ?? 'none'); G.simSteps = 6; await holdE(2.6); }
+  check('three feeders cut -> checkpoint', S().objective === 1 && G.checkpoint?.name === 'Feeders cut' && G.props.cableA.style === 'cut', S().objective + ' ' + G.checkpoint?.name + ' [' + seen + '] ' + S().status + ' hp=' + Math.round(G.local.health));
   teleport(19.5, -19); await holdE(3.3); await waitSim(.5);
   check('interconnector tripped -> door opens + checkpoint', S().objective === 2 && G.props.vaultEast.style === 'open' && G.checkpoint?.name === 'Interconnector down', S().objective);
   check('escape timer shown', /⏱ 1:1\d/.test(document.getElementById('objectiveSub').textContent), document.getElementById('objectiveSub').textContent);
@@ -783,6 +784,74 @@ async function mission15() {
   check('staying on camera raises the alarm', G.stealth.alarm && document.getElementById('stealthPill').textContent === 'ALARM');
 }
 
+function aimAt(target) {
+  const eye = G.local.pos.clone().setY(G.local.crouched ? 1.05 : 1.62), d = target.clone().sub(eye);
+  G.local.yaw = Math.atan2(-d.x, -d.z); G.local.pitch = Math.asin(d.y / d.length()); G.local.kick = 0;
+}
+
+async function mission16() {
+  await goNext(16);
+  check('mission 16: peaker plant at dusk', S().status === 'briefing' && S().mission === 'm16' && G.level.id === 'peaker', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  check('LR-40 launcher in hand', S().weapon === 'launcher' && G.local.ammo.launcher.mag === 4, S().weapon);
+
+  // A round fired from close range is a dud; one that has flown 4 m bursts on impact.
+  for (const e of G.enemies) e.g.visible = true;
+  teleport(0, 31, 0); G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0;
+  G.local.pitch = -1.25; mouse('mousedown', 0); await frames(1); mouse('mouseup', 0);
+  await waitSim(.8);
+  check('a round that hits inside 4 m is a dud (no blast)', G.local.health === 100 && G.local.ammo.launcher.mag === 3, G.local.health);
+  godMode();
+  const h = G.enemies.find(e => e.type.name === 'Hauler');
+  h.state = 'patrol'; h.patrol.copy(h.pos); h.home.copy(h.pos); h.dest.copy(h.pos);
+  const fwd = new THREE.Vector3(-Math.sin(h.yaw), 0, -Math.cos(h.yaw));
+  teleport(h.pos.x + fwd.x * 14, h.pos.z + fwd.z * 14); aimAt(h.pos.clone().setY(1.3));
+  const hp0 = h.hp; G.simSteps = 1; await waitSim(.6); mouse('mousedown', 0); await frames(1); mouse('mouseup', 0);
+  await waitSim(1, () => aimAt(h.pos.clone().setY(1.3))); G.simSteps = 6;
+  check('an HE round wrecks a Hauler head-on (no armour vs HE)', hp0 - h.hp > 140, (hp0 - h.hp).toFixed(0));
+  damageEnemy(h, 1e6, false, G.local);
+
+  const D = G.props.diesel, C = G.props.compressor, U = G.props.unit2;
+  check('plant starts cold', [D, C, U].every(q => q.style === 'cold'));
+  teleport(-30, 22.4, Math.PI); await holdE(3.3);
+  check('diesel cranked -> speed gauge', S().objective === 1 && D.style === 'running' && /Diesel speed/.test(document.getElementById('objectiveSub').textContent), S().objective);
+  await waitSim(1); const g1 = G.objState.hold;
+  check('gauge climbs while the diesel runs', g1 > .5, g1.toFixed(2));
+  damageProp(D, 1e6); const g2 = G.objState.hold; await waitSim(1);
+  check('a tripped diesel stalls the sequence', D.style === 'tripped' && Math.abs(G.objState.hold - g2) < .01, D.style);
+  teleport(-30, 22.4, Math.PI); G.simSteps = 1; await frames(2);
+  const reboot = G.local.interaction?.type === 'reboot'; G.simSteps = 6;
+  await holdE(3.3);
+  check('hold E restarts it', reboot && D.style === 'running', 'offered=' + reboot);
+  G.objState.hold = 24.9; await waitSim(.5);
+  check('diesel at speed -> checkpoint', S().objective === 2 && G.checkpoint?.name === 'Diesel at speed' && !G.fired.has('gas-lobber'), S().objective);
+
+  teleport(-16, 25.4, 0); await holdE(1.8);
+  teleport(28, 22.4, Math.PI); await holdE(2.8);
+  check('aux breaker + compressor -> fuel gas pressure', S().objective === 4 && G.props.auxBkr.style === 'on' && C.style === 'running', S().objective);
+  damageProp(C, 1e6); let a = G.objState.hold; await waitSim(2); const half = G.objState.hold - a;
+  C.setStyle('running'); C.hp = C.maxHp; a = G.objState.hold; await waitSim(2); const full = G.objState.hold - a;
+  check('pressure builds at half rate with one machine down', Math.abs(half / full - .5) < .12, (half / full).toFixed(2));
+  G.objState.hold = 18.1; await waitSim(.3);
+  check('lobber wave during the pressure build', G.fired.has('gas-lobber'));
+  G.objState.hold = 39.9; await waitSim(.5);
+  check('fuel gas up -> checkpoint', S().objective === 5 && G.checkpoint?.name === 'Fuel gas up', S().objective);
+
+  // Death and retry: the plant comes back as it was at the checkpoint.
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  await click('retryBtn'); godMode(); await frames(3);
+  check('retry: diesel and compressor still running', S().objective === 5 && G.props.diesel.style === 'running' && G.props.compressor.style === 'running' && G.props.unit2.style === 'cold', S().objective);
+
+  teleport(4.6, -15, -Math.PI / 2); await holdE(3.3);
+  check('Unit 2 ignited -> turbine speed', S().objective === 6 && G.props.unit2.style === 'running', S().objective);
+  G.objState.hold = 22.1; await waitSim(.3);
+  G.objState.hold = 36.1; await waitSim(.3);
+  check('Hauler and Bulwark waves on Unit 2', G.fired.has('unit-hauler') && G.fired.has('unit-last'));
+  G.objState.hold = 49.9; await waitSim(.5);
+  teleport(6, -22.4, Math.PI); await holdE(2.3); await waitSim(3);
+  check('generator breaker closed -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -790,7 +859,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -816,6 +885,7 @@ async function run() {
   await mission13();
   await mission14();
   await mission15();
+  await mission16();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

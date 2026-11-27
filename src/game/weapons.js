@@ -17,6 +17,8 @@ export const WEAPONS = {
   dmr: { name: 'DMR-14 / MARKSMAN', short: 'dmr', mode: 'SEMI · ZOOM', cap: 10, reserveMax: 40, interval: .34, reload: 2.4, damage: 70, spread: .0025, kick: .034, speed: 320, auto: false, sound: 'dmr', zoom: 46 },
   // Suppressed sidearm for stealth: quiet shots that barely carry.
   spistol: { name: 'P12-S / SUPPRESSED', short: 'p12-s', mode: 'SEMI · SUPPRESSED', cap: 12, reserveMax: 36, interval: .26, reload: 1.6, damage: 46, spread: .01, kick: .02, speed: 210, auto: false, sound: 'pistol', noise: 5, quiet: true },
+  // LR-40: four-round launcher. HE rounds burst on impact once armed (past 4 m; closer impacts are duds).
+  launcher: { name: 'LR-40 / LAUNCHER', short: 'lr-40', mode: 'HE · IMPACT', cap: 4, reserveMax: 12, interval: .62, reload: 3.4, damage: 0, spread: .006, kick: .09, speed: 0, auto: false, sound: 'shotgun', launch: 36, noise: 45 },
   // Arc carbine: electric bolts that stun a machine and chain to up to two more nearby.
   arc: { name: 'ARC-3 / ARC CARBINE', short: 'arc', mode: 'SEMI · STUN + CHAIN', cap: 16, reserveMax: 64, interval: .27, reload: 2.2, damage: 24, spread: .006, kick: .02, speed: 150, auto: false, sound: 'arc', arc: { chains: 2, range: 7, stun: 1.4 } },
 };
@@ -35,7 +37,11 @@ export function fire(p) {
   }
   a.mag--; p.stats.shots++; p.fireDelay = w.interval;
   const origin = eyeOf(p);
-  for (let i = 0; i < (w.pellets ?? 1); i++) {
+  if (w.launch) {
+    const d = aimDirection(p, spreadOf(p) * .6), pos = origin.clone().addScaledVector(d, .55), vel = d.multiplyScalar(w.launch).add(new THREE.Vector3(0, 1, 0));
+    if (isClient()) sendGrenade(pos, vel, 'he'); else spawnBomb(pos, vel, p, 'he');
+  }
+  for (let i = 0; i < (w.launch ? 0 : w.pellets ?? 1); i++) {
     const dir = aimDirection(p, spreadOf(p) + (w.pelletSpread ?? 0) * (w.pellets ? Math.random() : 0));
     const kind = w.arc ? 'arc' : null;
     if (isClient()) { sendShot(origin, dir, w.speed, w.damage, kind); projectile(origin, dir, w.speed, 0, p, true, false, null, kind); }
@@ -84,7 +90,9 @@ export function throwGrenade(p, kind = 'frag') {
 
 /** Creates a live grenade (host/solo only). */
 export function spawnBomb(pos, vel, owner, kind = 'frag') {
-  const g = new THREE.Group(); cyl(g, 0, 0, 0, .07, .085, .18, kind === 'smoke' ? 'white' : kind === 'emp' ? 'blue' : 'green', 9); box(g, 0, .11, 0, .09, .04, .05, 'edge');
+  const g = new THREE.Group();
+  if (kind === 'he') { cyl(g, 0, 0, 0, .05, .05, .14, 'green', 8); cyl(g, 0, .09, 0, .05, .02, .05, 'amber', 8); }
+  else { cyl(g, 0, 0, 0, .07, .085, .18, kind === 'smoke' ? 'white' : kind === 'emp' ? 'blue' : 'green', 9); box(g, 0, .11, 0, .09, .04, .05, 'edge'); }
   g.position.copy(pos); G.dynRoot.add(g);
-  G.bombs.push({ g, pos: pos.clone(), vel: vel.clone(), fuse: kind === 'smoke' ? 1.4 : kind === 'emp' ? 1.6 : 2.5, spin: Math.random() * 4 + 2, owner, kind });
+  G.bombs.push({ g, pos: pos.clone(), vel: vel.clone(), start: pos.clone(), fuse: kind === 'smoke' ? 1.4 : kind === 'emp' ? 1.6 : kind === 'he' ? 6 : 2.5, spin: kind === 'he' ? 0 : Math.random() * 4 + 2, owner, kind });
 }

@@ -198,7 +198,7 @@ export function objectiveText() {
     const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
     sub = (o.sub ? o.sub + ' · ' : '') + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') + ' left';
   }
-  if (o.type === 'uplink') sub = 'Uplink ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + o.targets.map(id => (G.props[id].label ?? id) + (G.props[id].style === (o.onlineStyle ?? 'online') ? ' ●' : ' ○')).join('  ');
+  if (o.type === 'uplink') sub = (o.gauge ?? 'Uplink') + ' ' + Math.floor(Math.min(1, G.objState.hold / o.time) * 100) + '% · ' + o.targets.map(id => (G.props[id].label ?? id) + (G.props[id].style === (o.onlineStyle ?? 'online') ? ' ●' : ' ○')).join('  ');
   if (o.type === 'switching') sub = Object.keys(G.mission.switching.breakers).map(id => id + (isClosed(id) ? ' ●' : ' ○')).join('   ') + (o.sub ? ' · ' + o.sub : '');
   if (o.timeLimit) {
     const left = Math.max(0, Math.ceil(o.timeLimit - G.objState.t));
@@ -419,14 +419,20 @@ function interactionCandidate(p) {
   for (const q of G.players) {
     if (q !== p && q.downed && flat(q.pos, p.pos) < 2.2) return { type: 'revive', obj: q, name: 'Revive ' + q.name, time: 3 };
   }
-  // Silent takedown: from behind, on a machine that hasn't spotted you.
+  const o = currentObjective(), kind = o?.type ?? 'interact';
+  // Mission objectives come before anything optional.
+  if (o && (kind === 'interact' || kind === 'collect')) {
+    for (const id of objectiveTargets(o)) {
+      if (flat(p.pos, posOf(id)) < (o.reach ?? 2.6)) return { type: 'objective', obj: id, name: o.action, time: o.time };
+    }
+  }
+  // Silent takedown: from behind, on a patrolling machine that has no idea you're there.
   for (const e of G.enemies) {
-    if (e.dead || e.type.boss || e.state === 'engage' || (e.elev ?? 0) > 1) continue;
+    if (e.dead || e.type.boss || e.state !== 'patrol' || e.memory > 0 || (e.elev ?? 0) > 1) continue;
     const d = flat(e.pos, p.pos); if (d > 1.9) continue;
     const fwd = new THREE.Vector3(-Math.sin(e.yaw), 0, -Math.cos(e.yaw)), toMe = new THREE.Vector3(p.pos.x - e.pos.x, 0, p.pos.z - e.pos.z).normalize();
     if (fwd.dot(toMe) < -.3) return { type: 'takedown', obj: e, name: 'Takedown', time: .35 };
   }
-  const o = currentObjective(), kind = o?.type ?? 'interact';
   // Optional actions on props (def.use: { action, time, events }), e.g. looping the cameras.
   for (const q of Object.values(G.props)) {
     if (q.use && !q.used && flat(q.pos, p.pos) < (q.use.reach ?? 2.4)) return { type: 'use', obj: q, name: q.use.action, time: q.use.time ?? 2 };
@@ -434,11 +440,6 @@ function interactionCandidate(p) {
   if (kind === 'switching') {
     const id = breakerNear(p, o.reach ?? 2.6);
     if (id) return { type: 'breaker', obj: id, name: (isClosed(id) ? 'Open' : 'Close') + ' breaker ' + id, time: o.time ?? 1.4 };
-  }
-  if (o && (kind === 'interact' || kind === 'collect')) {
-    for (const id of objectiveTargets(o)) {
-      if (flat(p.pos, posOf(id)) < (o.reach ?? 2.6)) return { type: 'objective', obj: id, name: o.action, time: o.time };
-    }
   }
   for (const q of Object.values(G.props)) {
     if (q.downStyle && q.style === q.downStyle && flat(q.pos, p.pos) < 3.2) {
@@ -467,7 +468,7 @@ export function updateInteract(p, dt) {
   if (p.interactTime < c.time) return;
   p.interactTime = 0;
   if (c.type === 'revive') { if (c.obj.downed) revive(c.obj, p); return; }
-  if (c.type === 'takedown') { if (!c.obj.dead && c.obj.state !== 'engage') { damageEnemy(c.obj, 1e6, false, p, { explosive: true }); feed('Silent takedown'); } return; }
+  if (c.type === 'takedown') { if (!c.obj.dead && c.obj.state === 'patrol') { damageEnemy(c.obj, 1e6, false, p, { explosive: true }); feed('Silent takedown'); } return; }
   if (c.type === 'use') { c.obj.used = true; sfxFor(p, 'objective'); runEvents(c.obj.use.events); updateHUD(); return; }
   if (c.type === 'breaker') { operate(c.obj, p); updateHUD(); return; }
   if (c.type === 'reboot') { rebootProp(c.obj); sfxFor(p, 'objective'); feed((p.local ? 'You' : p.name) + ' rebooted ' + (c.obj.label ?? 'equipment')); updateHUD(); return; }

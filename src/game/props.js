@@ -405,6 +405,40 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Gas turbine unit (peaker plant): enclosure along z with the inlet filter house at the south end
+  // and the exhaust stack at the north. Styles: 'cold', 'running', 'tripped'. pos = side control cab.
+  gasTurbine(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const paint = new THREE.MeshStandardMaterial({ color: 0x8c9290, roughness: .7, metalness: .2 });
+    box(root, x, .2, z, 7, .4, 20, 'concrete');
+    box(root, x, 2.6, z - 1, 5, 4.4, 12, paint);                                 // enclosure
+    for (let k = -6; k <= 4; k += 2) box(root, x + 2.52, 2.6, z + k, .04, 4, .08, 'edge');
+    box(root, x, 5.2, z + 7, 6, 3.2, 3.6, paint); box(root, x, 3.4, z + 7, 3, 1.2, 3, 'dark');   // inlet filter house
+    for (let k = -2.6; k <= 2.6; k += .65) box(root, x + k, 5.2, z + 8.82, .3, 2.8, .04, 'edge');
+    const stack = cyl(root, x, 7.5, z - 8.5, 1.5, 1.7, 15, paint, 14);
+    const lip = new THREE.MeshStandardMaterial({ color: 0x3a3634, emissive: 0xff7a2a, emissiveIntensity: 0 });
+    cyl(root, x, 15.1, z - 8.5, 1.55, 1.55, .3, lip, 14);
+    const fan = new THREE.Group(); fan.position.set(x, 3.4, z + 5.45); root.add(fan);
+    for (let i = 0; i < 6; i++) { const b = box(fan, 0, .45, 0, .16, .9, .04, 'steel'); b.parent.remove(b); const arm = new THREE.Group(); arm.rotation.z = i * Math.PI / 3; arm.add(b); fan.add(arm); }
+    const lamps = { cold: emissive(0x303a40, .1), running: emissive(0x5ce08a, 1.6), tripped: emissive(0xf3b13a, 1.6) };
+    box(root, x + 3.2, 1.1, z - 3, .9, 2.2, 1.6, 'edge');                         // control cab
+    const lamp = box(root, x + 3.66, 1.9, z - 3, .04, .2, .2, lamps.cold);
+    const circles = [-6.5, -3.5, -.5, 2.5, 5.5].map(o => ({ x, z: z + o, r: 2.6 })).concat([{ x, z: z - 8.5, r: 1.8 }]);
+    const mover = addMover({ circles, box: new THREE.Box3(new THREE.Vector3(x - 2.6, 0, z - 10.3), new THREE.Vector3(x + 2.6, 6.8, z + 8.9)) });
+    let spin = 0, last = 0;
+    const prop = {
+      root, mover, pos: new THREE.Vector3(x + 3.9, 1.4, z - 3),
+      setStyle(s) { lamp.material = lamps[s] ?? lamps.cold; },
+      update(t) {
+        const dt = Math.min(.5, Math.max(0, t - last)); last = t;
+        spin = prop.style === 'running' ? Math.min(1, spin + dt * .08) : Math.max(0, spin - dt * .15);
+        fan.rotation.z += spin * 30 * dt; lip.emissiveIntensity = spin * 2.2;
+        if (prop.style === 'running') lamp.material.emissiveIntensity = 1.2 + Math.sin(t * 3) * .4;
+      },
+    };
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -432,7 +466,7 @@ const PROP_TYPES = {
     const g = new THREE.Group(); root.add(g); g.position.set(x, 0, z); g.rotation.y = def.yaw ?? 0;
     const paint = new THREE.MeshStandardMaterial({ color: 0x3f6b5c, roughness: .6, metalness: .35 });
     const burnt = new THREE.MeshStandardMaterial({ color: 0x2a2624, roughness: .95 });
-    const lamps = { running: emissive(0x5ce08a, 1.6), tripped: emissive(0xf3b13a, 1.6), wrecked: emissive(0x401010, .2) };
+    const lamps = { running: emissive(0x5ce08a, 1.6), tripped: emissive(0xf3b13a, 1.6), wrecked: emissive(0x401010, .2), cold: emissive(0x303a40, .1) };
     box(g, 0, .2, 0, 7.6, .4, 3, 'concrete');
     const body = box(g, 0, 1.6, 0, 7, 2.4, 2.6, paint);
     box(g, 0, 2.86, 0, 7.1, .12, 2.7, 'edge');
@@ -453,7 +487,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold' };
 
 export function spawnProps(defs) {
   G.props = {};

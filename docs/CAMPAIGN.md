@@ -151,5 +151,7 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 13 *Static*: the EMP HUD with stereo objective pings, beacon landmarks, the Arc lobber and its electric fields, and EMP grenades.
      - Done: 14 *Cold Iron*: snow, the Hauler with its rear weak spot, and battery wagons shunted onto the train.
      - Done: 15 *Black Box*: stealth (cameras, detection, alarm waves), takedowns, suppressed pistol. Act III complete.
-     - Next: Act IV, 16–20: the race to LODESTAR before Halvard overloads its core.
+   - **In progress: Act IV, *Blackstart*.**
+     - Done: 16 *Cold Start*: the LR-40 launcher and a staged blackstart (diesel, fuel gas, turbine, sync) where tripped machines stall progress.
+     - Next: 17 *Heat Sink*: datacenter cooling caverns, heat hazards and Repair drones.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.
