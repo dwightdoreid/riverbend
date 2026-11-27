@@ -153,5 +153,6 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 15 *Black Box*: stealth (cameras, detection, alarm waves), takedowns, suppressed pistol. Act III complete.
    - **In progress: Act IV, *Blackstart*.**
      - Done: 16 *Cold Start*: the LR-40 launcher and a staged blackstart (diesel, fuel gas, turbine, sync) where tripped machines stall progress.
-     - Next: 17 *Heat Sink*: datacenter cooling caverns, heat hazards and Repair drones.
+     - Done: 17 *Heat Sink*: cooling caverns, cycling steam vents, a superheated gallery cooled by bypass valves, and Repair drones.
+     - Next: 18 *Redundancy*: LODESTAR copies itself; destroy three mirror nodes as the facility reroutes.
 5. **Phase 4, polish:** music, audio, effects, mobile performance, medals and balancing.

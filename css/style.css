@@ -91,3 +91,6 @@ body.emp #static{display:block;animation:staticFlicker .18s steps(2) infinite}
 #stealthPill.detect{color:var(--amber)}
 #stealthPill.alarm{color:var(--red);animation:alarmBlink .6s steps(2) infinite}
 @keyframes alarmBlink{50%{opacity:.4}}
+
+/* Superheated air: an orange shimmer over the view */
+#heatTint{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,rgba(255,120,40,.15) 0%,rgba(255,90,20,.55) 70%,rgba(200,50,10,.8) 100%);mix-blend-mode:screen;transition:opacity .2s}

@@ -264,6 +264,69 @@ export const ENEMY_TYPES = {
       return [];
     },
   },
+  // Repair drone: unarmed, fragile, and the reason a fight never ends. It hangs back behind the
+  // most damaged machine in range and repairs it with a beam. Shoot it first.
+  mender: {
+    name: 'Repair drone', hp: 70, color: 0xd9ddd2, unarmed: true,
+    hover: 2.7, bob: .14, eyeY: 2.7, muzzle: [0, 2.6, 0], centerY: 2.7,
+    hitParts: [{ y: 2.7, r: .52, head: false }, { y: 2.95, r: .22, head: true }],
+    speed: { patrol: 2.6, search: 3.4, close: 4.2, retreat: 4.6, strafe: 3 },
+    sight: { stand: 30, crouch: 24, crouchStill: 18, fov: 0 },
+    range: { far: 99, near: 0 }, strafeSwap: 2,
+    gun: { speed: 0, damage: 0, cooldown: [9, 0], spread: [0, 0], sound: 'heal' },
+    heal: { range: 9, search: 26, rate: 30, frac: .05 },
+    build(g, bodyMat) {
+      cyl(g, 0, 2.7, 0, .42, .36, .3, bodyMat, 14);
+      const cross = new THREE.MeshStandardMaterial({ color: 0x7dffa8, emissive: 0x3fe07a, emissiveIntensity: 1.8 });
+      box(g, 0, 2.87, 0, .36, .03, .1, cross); box(g, 0, 2.87, 0, .1, .03, .36, cross);
+      cyl(g, 0, 2.48, 0, .1, .16, .14, 'dark', 10);
+      const rotors = [];
+      for (const [x, z] of [[-.55, 0], [.55, 0], [0, -.55], [0, .55]]) { rod(g, [0, 2.7, 0], [x, 2.75, z], .035, 'edge', 6); rotors.push(box(g, x, 2.82, z, .46, .012, .06, 'steel')); }
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(.04, .04, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: 0x7dffa8, transparent: true, opacity: .55, depthWrite: false }));
+      beam.visible = false; g.add(beam); g.userData.beam = beam;
+      return rotors;
+    },
+    pose(e) {
+      // The beam to the patient (co-op clients re-derive the patient from synced health).
+      const beam = e.g.userData.beam, p = isClient() ? menderPatient(e, e.type.heal.range) : e.healing;
+      beam.visible = !!p && !p.dead;
+      if (!beam.visible) return;
+      const to = p.pos.clone().setY((p.elev ?? 0) > 1 ? p.elev : p.type.centerY).sub(e.g.position).applyAxisAngle(new THREE.Vector3(0, 1, 0), -e.yaw);
+      const from = new THREE.Vector3(0, 2.48, 0), len = from.distanceTo(to);
+      beam.position.copy(from).add(to).multiplyScalar(.5); beam.scale.set(1, len, 1);
+      beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
+      beam.material.opacity = .4 + Math.sin(G.elapsed * 18) * .15;
+    },
+    update(e, dt, from) {
+      if (isClient()) return;
+      const T = e.type, H = T.heal;
+      e.sense -= dt;
+      if (e.sense <= 0) { e.sense = .3; e.visible = G.players.some(p => isActive(p) && canSee(e, from, p) >= 0); if (e.visible) e.state = 'engage'; }
+      const threat = nearestPlayer(e.pos), patient = menderPatient(e, H.search);
+      const away = (anchor, dist) => {                       // a spot `dist` behind anchor, as seen from the threat
+        const dir = threat ? anchor.pos.clone().sub(threat.pos).setY(0) : new THREE.Vector3(Math.sin(e.id), 0, Math.cos(e.id));
+        return anchor.pos.clone().add(dir.lengthSq() > .01 ? dir.normalize().multiplyScalar(dist) : new THREE.Vector3(dist, 0, 0));
+      };
+      e.healing = null;
+      if (patient) {
+        const d = flatDist(e.pos, patient.pos), spot = away(patient, 4.5);
+        if (flatDist(e.pos, spot) > 1.2) navigate(e, spot, T.speed.close, dt);
+        e.yaw = Math.atan2(-(patient.pos.x - e.pos.x), -(patient.pos.z - e.pos.z));
+        const center = patient.pos.clone().setY((patient.elev ?? 0) > 1 ? patient.elev : patient.type.centerY);
+        if (d < H.range && los(from, center)) {
+          e.healing = patient;
+          patient.hp = Math.min(patient.maxHp, patient.hp + Math.max(H.rate, patient.maxHp * H.frac) * dt);
+          e.chirp = (e.chirp ?? 0) - dt; if (e.chirp <= 0) { e.chirp = .9; sfxAt(e.pos, 'heal', .6, 35); }
+        }
+      } else {
+        const buddy = G.enemies.filter(o => !o.dead && o !== e && o.faction === e.faction && o.type !== T && !o.type.boss).sort((a, b) => flatDist(a.pos, e.pos) - flatDist(b.pos, e.pos))[0];
+        if (buddy && flatDist(buddy.pos, e.pos) < 34) { const spot = away(buddy, 4); if (flatDist(e.pos, spot) > 1.5) navigate(e, spot, T.speed.search, dt); }
+        else if (threat && flatDist(threat.pos, e.pos) < 14) botMove(e, e.pos.clone().sub(threat.pos).normalize().multiplyScalar(4).add(e.pos), T.speed.retreat, dt);
+        else { if (e.pos.distanceTo(e.dest) < .9) e.dest.copy(e.dest.distanceTo(e.home) < 1 ? e.patrol : e.home); navigate(e, e.dest, T.speed.patrol, dt); }
+        if (threat) e.yaw = Math.atan2(-(threat.pos.x - e.pos.x), -(threat.pos.z - e.pos.z));
+      }
+    },
+  },
   // Fast, fragile flyer. Hunts in pairs, closes distance and circles instead of holding range.
   skimmer: {
     name: 'Skimmer', hp: 45, color: 0x6f8189,
@@ -319,6 +382,16 @@ export function addEnemy(def, alertAt = null) {
   if (isHost() && G.status === 'playing') fxAll({ t: 'enemy', def, alert: alertAt ? [alertAt.x, alertAt.z] : null });
   G.enemies.push(e);
   return e;
+}
+
+/** The machine a Repair drone should work on: the most damaged ally within range (not bosses). */
+export function menderPatient(e, range) {
+  let best = null, bestF = 1;
+  for (const o of G.enemies) {
+    if (o.dead || o === e || o.type === e.type || o.type.boss || o.faction !== e.faction || flatDist(o.pos, e.pos) > range) continue;
+    const f = o.hp / o.maxHp; if (f < bestF - .001) { best = o; bestF = f; }
+  }
+  return best;
 }
 
 /** Co-op scaling: machines get tougher with more players (counts scale in wave events). */

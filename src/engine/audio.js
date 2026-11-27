@@ -33,6 +33,17 @@ export function sound(kind = 'shot', level = 1, pan = 0) {
     const o = audio.createOscillator(); o.type = 'triangle';
     o.frequency.setValueAtTime(kind === 'blast' ? 90 : 160, t); o.frequency.exponentialRampToValueAtTime(35, t + dur);
     o.connect(g); o.start(t); o.stop(t + dur);
+  } else if (kind === 'steam') {
+    // Hiss: high-passed noise with a slow fade.
+    const n = audio.createBufferSource(); n.buffer = noiseBuffer; n.loop = true;
+    const f = audio.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 2600;
+    g.gain.setValueAtTime(.001, t); g.gain.exponentialRampToValueAtTime(.32 * level, t + .08); g.gain.exponentialRampToValueAtTime(.001, t + 1.6);
+    n.connect(f); f.connect(g); n.start(t); n.stop(t + 1.65);
+  } else if (kind === 'heal') {
+    const o = audio.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(520, t); o.frequency.exponentialRampToValueAtTime(980, t + .25);
+    g.gain.setValueAtTime(.04 * level, t); g.gain.exponentialRampToValueAtTime(.001, t + .3);
+    o.connect(g); o.start(t); o.stop(t + .32);
   } else if (kind === 'arc') {
     const o = audio.createOscillator(); o.type = 'square';
     o.frequency.setValueAtTime(1500, t); o.frequency.exponentialRampToValueAtTime(260, t + .16);

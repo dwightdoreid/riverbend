@@ -3,7 +3,8 @@
 import { THREE } from '../engine/three.js';
 import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
 import { G } from './state.js';
-import { addMover } from './world.js';
+import { addMover, block, addSolid } from './world.js';
+import { sound } from '../engine/audio.js';
 import { districtLit } from './blackout.js';
 import { burst } from './combat.js';
 import { runEvents } from './mission.js';
@@ -439,6 +440,84 @@ const PROP_TYPES = {
     return prop;
   },
 
+  // Steam vent: a floor grate that blasts scalding steam on a cycle (shared clock, so co-op
+  // clients agree). Style 'active' or 'closed'. Damage is applied by heat.js on the host.
+  vent(parent, def) {
+    const [x, z] = def.at, r = def.r ?? 2.6, root = new THREE.Group(); parent.add(root);
+    const glow = new THREE.MeshStandardMaterial({ color: 0x4a2a1a, emissive: 0xff6a20, emissiveIntensity: .3 });
+    box(root, x, .03, z, r * 1.5, .06, r * 1.5, glow).castShadow = false;
+    for (let k = -r * .6; k <= r * .6; k += .35) box(root, x + k, .08, z, .08, .05, r * 1.5, 'dark').castShadow = false;
+    const puffs = [];
+    for (let i = 0; i < 10; i++) {
+      const m = new THREE.Mesh(geo('sphere', 1, 10, 8), new THREE.MeshStandardMaterial({ color: 0xe9eef0, transparent: true, opacity: 0, depthWrite: false, roughness: 1 }));
+      m.userData.o = [(Math.random() - .5) * r, Math.random(), (Math.random() - .5) * r, .7 + Math.random() * .6]; root.add(m); puffs.push(m);
+    }
+    let lastPhase = 'idle';
+    const prop = {
+      root, pos: new THREE.Vector3(x, 1, z), r, def,
+      setStyle() {},
+      phase: () => prop.style === 'closed' ? 'idle' : ventPhase(def, G.elapsed),
+      update(t) {
+        const ph = prop.phase();
+        if (ph === 'blast' && lastPhase !== 'blast' && G.local && Math.hypot(G.local.pos.x - x, G.local.pos.z - z) < 30) sound('steam', Math.max(.15, 1 - Math.hypot(G.local.pos.x - x, G.local.pos.z - z) / 30));
+        lastPhase = ph;
+        const k = ph === 'blast' ? 1 : ph === 'warn' ? .18 : 0;
+        glow.emissiveIntensity = prop.style === 'closed' ? .05 : ph === 'warn' ? 1.4 + Math.sin(t * 30) * .6 : ph === 'blast' ? 2 : .3;
+        for (const m of puffs) {
+          const [ox, oy, oz, s] = m.userData.o, rise = (t * 1.6 + oy * 4) % 4;
+          m.position.set(x + ox * (1 + rise * .15), .4 + rise * (k > .5 ? 1 : .35), z + oz * (1 + rise * .15));
+          m.scale.setScalar(s * (.5 + rise * .35) * (k > .5 ? 1 : .6));
+          m.material.opacity = k * .5 * (1 - rise / 4.2);
+        }
+      },
+    };
+    return prop;
+  },
+
+  // Bypass valve: a big handwheel on a pipe stub. Style 'closed' or 'open' (the wheel turns).
+  valve(parent, def) {
+    const [x, z] = def.at, f = def.facing ?? 1, root = new THREE.Group(); parent.add(root);
+    const paint = new THREE.MeshStandardMaterial({ color: 0xb8402c, roughness: .6, metalness: .3 });
+    cyl(root, x, 1.2, z, .3, .3, 2.4, 'steel', 10);
+    const stub = cyl(root, x, 1.25, z + f * .45, .18, .18, .9, 'steel', 10); stub.rotation.x = Math.PI / 2;
+    const wheel = new THREE.Group(); wheel.position.set(x, 1.25, z + f * .95); root.add(wheel);
+    const rim = mesh(wheel, geo('torus', .42, .05, 6, 18), paint, 0, 0, 0);
+    for (let i = 0; i < 3; i++) { const sp = box(wheel, 0, 0, 0, .84, .05, .05, paint); sp.rotation.z = i * Math.PI / 3; }
+    const lamps = { closed: emissive(0xe0503a, 1.4), open: emissive(0x5ce08a, 1.4) };
+    const lamp = box(root, x, 2.55, z + f * .3, .16, .16, .16, lamps.closed);
+    block(x, z, .7, .7); addSolid(x - .35, 0, z - .35, x + .35, 2.4, z + .35);
+    let turn = 0;
+    return {
+      root, pos: new THREE.Vector3(x, 1.2, z + f * 1.2),
+      setStyle(s) { lamp.material = lamps[s] ?? lamps.closed; },
+      update(t) { const target = this.style === 'open' ? Math.PI * 4 : 0; turn += (target - turn) * .06; wheel.rotation.z = turn; void rim; },
+    };
+  },
+
+  // A superheated passage: hot haze and glowing floor whose strength is the fraction of
+  // def.valves still closed. heat.js scalds players inside it on the host.
+  heatZone(parent, def) {
+    const [x0, z0, x1, z1] = def.rect, root = new THREE.Group(); parent.add(root);
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
+    const floor = new THREE.MeshStandardMaterial({ color: 0x3a1a10, emissive: 0xff5a1a, emissiveIntensity: 1 });
+    for (let z = z0 + 1.5; z < z1; z += 3) box(root, cx, .03, z, w * .7, .05, .5, floor).castShadow = false;
+    const light = new THREE.PointLight(0xff6a2a, 0, Math.max(w, d) * .9, 1.4); light.position.set(cx, 3, cz); root.add(light);
+    const prop = {
+      root, pos: new THREE.Vector3(cx, 1, cz), rect: def.rect,
+      setStyle() {},
+      heat: () => (def.valves ?? []).filter(id => G.props[id]?.style !== 'open').length / Math.max(1, (def.valves ?? []).length),
+      update(t) {
+        const k = prop.heat();
+        // Inside the heat the screen tints and shimmers (local player only).
+        const me = G.local, inside = me && me.pos.x >= x0 && me.pos.x <= x1 && me.pos.z >= z0 && me.pos.z <= z1;
+        const tint = document.getElementById('heatTint');
+        if (tint && (inside || tint.dataset.zone === def.id)) { tint.dataset.zone = inside && k ? def.id : ''; tint.style.opacity = inside ? (k * (.45 + Math.sin(t * 7) * .08)).toFixed(3) : 0; }
+        floor.emissiveIntensity = .15 + k * 1.6; light.intensity = k * 14;
+      },
+    };
+    return prop;
+  },
+
   // Railway points lever (switch stand). Style 'normal' or 'reverse' (lever thrown).
   lever(parent, def) {
     const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
@@ -487,7 +566,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold', vent: 'active', valve: 'closed', heatZone: 'on' };
 
 export function spawnProps(defs) {
   G.props = {};
@@ -528,6 +607,12 @@ export function spawnPickups(defs) {
     else for (const dx of [-.3, .3]) box(g, x + dx, .5, z + .39, .07, .7, .03, 'amber');
     return { g, pos: new THREE.Vector3(x, .8, z), type, used: false };
   });
+}
+
+/** Vent cycle: 'blast' for def.on seconds, a 'warn' hiss before it, 'idle' otherwise. */
+export function ventPhase(def, t) {
+  const period = def.period ?? 6, on = def.on ?? 2.6, u = ((t + (def.phase ?? 0)) % period + period) % period;
+  return u < on ? 'blast' : u > period - (def.warn ?? 1.2) ? 'warn' : 'idle';
 }
 
 /** A prop is "down" when destroyed ('wrecked') or knocked out (its def.downStyle, e.g. 'offline'). */

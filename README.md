@@ -19,8 +19,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 261 scripted solo checks (missions 01–16 + spawn safety) in headless Chrome
-python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m16), much faster
+python3 tools/smoke_test.py                  # 279 scripted solo checks (missions 01–17 + spawn safety) in headless Chrome
+python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m17), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
@@ -67,7 +67,7 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker, caverns) and reusable pieces (kit.js).
                       Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
@@ -91,11 +91,11 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr`, `arc` (stuns and chains between machines) and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `camera` (stealth missions), `gasTurbine`, `truck`, `train`, `battery` (a wagon shunted to `to` once coupled), `turbine`, `relay`, `beacon` (light column landmark), `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `camera` (stealth missions), `gasTurbine`, `vent`, `valve`, `heatZone`, `truck`, `train`, `battery` (a wagon shunted to `to` once coupled), `turbine`, `relay`, `beacon` (light column landmark), `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD. With `downStyle` (e.g. `'offline'`) and `upStyle`, zero health knocks the prop out instead of destroying it, and players hold E next to it to reboot it at half health.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, blockAhead, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
-- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `hauler` (armoured, weak rear radiator), `lobber` (Arc lobber: electric shells that leave damaging fields), `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), `tallyman`, and the bosses `warden` and `ironwalker`).
+- **enemies**: `{ type, at, patrol, harass? }`, where `type` is a key of `ENEMY_TYPES` in `bots.js` (`sentry`, `skimmer`, `bulwark`, `spotter`, `mender` (Repair drone: heals the most damaged ally in range), `hauler` (armoured, weak rear radiator), `lobber` (Arc lobber: electric shells that leave damaging fields), `lineman` (with `ceiling: true` it hangs from the ceiling until a player passes under it), `tallyman`, and the bosses `warden` and `ironwalker`).
   - **Factions:** Tallymen belong to `halvard`; everything else is `lodestar` (override with `faction`). Machines target players and machines of the other faction, their rounds hit the other faction, and they turn on whatever shoots them. `tag` names an enemy for `kill` objectives. With `harass: propId` (or a list of ids), an enemy attacks that prop, or the nearest one still up, when no player is in sight.
 - **onStart**: events that run when play begins.
 - **triggers**: `{ id, when, do: [events], objective? }`.
@@ -158,3 +158,9 @@ walls, ground or machines, and ignore Hauler armour. An `uplink` objective takes
 its progress) and `onlineStyle`; give machine props `hp`, `downStyle: 'tripped'`, `upStyle: 'running'`
 so raiders can trip them and players restart them with E. Triggers take `objective: n` to arm only
 during one objective.
+
+### Heat hazards (mission 17)
+`vent` props blast steam on a shared clock (`period`, `phase`, `on`, `warn`, radius `r`), scalding
+players and machines inside. A `heatZone` prop (`rect`, `valves`, `dps`) scalds players in proportion
+to how many of its valves are still closed (`valve` props, styles `closed`/`open`). Damage runs on
+the host in `src/game/heat.js`.

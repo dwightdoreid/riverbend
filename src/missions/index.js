@@ -15,5 +15,6 @@ import m13 from './m13_static.js';
 import m14 from './m14_cold_iron.js';
 import m15 from './m15_black_box.js';
 import m16 from './m16_cold_start.js';
+import m17 from './m17_heat_sink.js';
 
-export const CAMPAIGN = [m01, m02, m03, m04, m05, m06, m07, m08, m09, m10, m11, m12, m13, m14, m15, m16];
+export const CAMPAIGN = [m01, m02, m03, m04, m05, m06, m07, m08, m09, m10, m11, m12, m13, m14, m15, m16, m17];

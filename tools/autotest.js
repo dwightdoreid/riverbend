@@ -852,6 +852,73 @@ async function mission16() {
   check('generator breaker closed -> mission won', S().status === 'won', S().status);
 }
 
+async function mission17() {
+  await goNext(17);
+  check('mission 17: cooling caverns, underground', S().status === 'briefing' && S().mission === 'm17' && G.level.id === 'caverns' && G.env.dark, S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }   // quiet caverns for the mechanics checks
+
+  // Steam vents: a shared cycle; blasting vents scald players and cook machines.
+  const v = G.props.ventW1, waitPhase = async ph => { for (let i = 0; i < 400 && v.phase() !== ph; i++) await frames(1); };
+  await waitPhase('idle'); await waitPhase('blast');
+  teleport(-15, 12); G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0;
+  await waitSim(1);
+  const scald = 100 - G.local.health;
+  check('a blasting vent scalds the player', scald > 20 && v.phase() === 'blast', scald.toFixed(0) + ' dmg');
+  teleport(-15, 16); G.local.health = 100; await waitSim(1);
+  check('next to the vent: no damage', G.local.health === 100, G.local.health);
+  godMode();
+  const cooked = addEnemy({ type: 'sentry', at: [-15, 3] }), v2 = G.props.ventW2;
+  cooked.home.copy(cooked.pos); cooked.patrol.copy(cooked.pos); cooked.dest.copy(cooked.pos);
+  for (let i = 0; i < 400 && v2.phase() !== 'blast'; i++) await frames(1);
+  const c0 = cooked.hp; await waitSim(1, () => { cooked.pos.set(-15, 0, 3); });
+  check('machines caught in the steam get cooked', cooked.hp < c0, (c0 - cooked.hp).toFixed(0));
+  damageEnemy(cooked, 1e6, false, G.local);
+
+  // The hot gallery: scalds in proportion to the valves still closed.
+  const heatAt = async () => { teleport(0, -24); G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; await waitSim(1); const d = 100 - G.local.health; godMode(); return d; };
+  const full = await heatAt();
+  G.props.valveW.setStyle('open'); const half = await heatAt();
+  check('hot gallery scalds; one valve open halves it', full > 25 && Math.abs(half / full - .5) < .15, full.toFixed(0) + ' / ' + half.toFixed(0));
+  check('heat tint while inside', +document.getElementById('heatTint').style.opacity > .1, document.getElementById('heatTint').style.opacity);
+  G.props.valveW.setStyle('closed');
+
+  // Repair drones restore a damaged machine; drop the drone and the repairs stop.
+  const big = addEnemy({ type: 'hauler', at: [0, -10] }), doc = addEnemy({ type: 'mender', at: [-2, -6] });   // open floor: clear line for the beam
+  for (const e of [big, doc]) { e.home.copy(e.pos); e.patrol.copy(e.pos); e.dest.copy(e.pos); }
+  teleport(-30, -9); big.hp = big.maxHp * .4; const h0 = big.hp;
+  await waitSim(4.5);
+  check('a Repair drone repairs a damaged Hauler', big.hp > h0 + 60 && doc.healing === big, (big.hp - h0).toFixed(0) + ' hp');
+  check('heal beam drawn', doc.g.userData.beam.visible);
+  damageEnemy(doc, 1e6, false, G.local); const h1 = big.hp; await waitSim(1.5);
+  check('no drone, no repairs', big.hp === h1, (big.hp - h1).toFixed(1));
+  damageEnemy(big, 1e6, false, G.local);
+
+  teleport(-28.6, -10.3, Math.PI); await holdE(2.8);
+  teleport(28.6, -10.3, Math.PI); await holdE(2.8);
+  check('both valves open -> gallery cooled + checkpoint', S().objective === 1 && G.checkpoint?.name === 'Gallery cooled' && G.props.gallery.heat() === 0, S().objective);
+  for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);   // the valve waves would shoot us
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; teleport(0, -24); await waitSim(1);
+  check('cooled gallery is safe', G.local.health === 100, G.local.health);
+  godMode();
+  teleport(0, -35); await waitSim(.6);
+  const guardian = G.enemies.find(e => !e.dead && e.def.tag === 'guardian');
+  check('pump hall: guardian and its drones + checkpoint', S().objective === 2 && !!guardian && G.enemies.filter(e => !e.dead && e.type.name === 'Repair drone').length >= 2 && G.checkpoint?.name === 'Pump hall', S().objective);
+
+  // Retry from the pump hall: valves still open, guardian back at full strength.
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  await click('retryBtn'); godMode(); await frames(3);
+  const g2 = G.enemies.find(e => !e.dead && e.def.tag === 'guardian');
+  check('retry: valves open, guardian waiting', S().objective === 2 && G.props.valveW.style === 'open' && G.props.valveE.style === 'open' && !!g2, S().objective);
+  damageEnemy(g2, g2.maxHp * .55, false, G.local, { explosive: 'he' }); await waitSim(.4);
+  check('guardian at half -> more drones', G.fired.has('guard-wave'));
+  for (const e of G.enemies) if (!e.dead && e.def.tag === 'guardian') damageEnemy(e, 1e6, false, G.local);
+  await waitSim(.5);
+  check('guardian destroyed -> hatch', S().objective === 3, S().objective);
+  teleport(3.6, -45.4, Math.PI); await holdE(3.3); await waitSim(3);
+  check('hatch open -> mission won', S().status === 'won', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -859,7 +926,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -886,6 +953,7 @@ async function run() {
   await mission14();
   await mission15();
   await mission16();
+  await mission17();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();
