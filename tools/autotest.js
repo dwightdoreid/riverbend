@@ -919,6 +919,57 @@ async function mission17() {
   check('hatch open -> mission won', S().status === 'won', S().status);
 }
 
+async function mission18() {
+  await goNext(18);
+  check('mission 18: datacenter halls', S().status === 'briefing' && S().mission === 'm18' && G.level.id === 'datahalls', S().mission);
+  await click('startBtn'); godMode(); await frames(3);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }
+  const P = G.props, shut = id => P[id].mover.enabled;
+  check('only the west hall door is open', !shut('dW') && shut('dN') && shut('dE') && shut('dWN') && shut('dNE'));
+  check('copy timer running', /⏱ 4:/.test(document.getElementById('objectiveSub').textContent), document.getElementById('objectiveSub').textContent);
+
+  // Mirror nodes are hardware: player rounds and blasts hurt them, machine fire doesn't.
+  const W = P.nodeW, from = new THREE.Vector3(-26, 1.6, 8);
+  let hp = W.hp; projectile(from, W.pos.clone().sub(from).normalize(), 240, 31, G.local); await frames(4);
+  check('player rounds damage a mirror node', W.hp < hp, (hp - W.hp).toFixed(0));
+  hp = W.hp; projectile(from, W.pos.clone().sub(from).normalize(), 240, 31, null); await frames(4);
+  check('machine fire does not', W.hp === hp, (hp - W.hp).toFixed(0));
+  hp = W.hp; spawnBomb(new THREE.Vector3(-26, 1.6, 8), new THREE.Vector3(0, 0, -30), G.local, 'he'); await waitSim(.6);   // 6.5 m: armed
+  check('an HE round takes a big bite', hp - W.hp > 120, (hp - W.hp).toFixed(0));
+
+  // Destroy it while standing in the west doorway: the door waits for you before sealing.
+  teleport(-12, 20); damageProp(W, 1e6); await waitSim(.4);
+  check('west node down -> doors reroute (north open)', !shut('dWN') && !shut('dN') && G.checkpoint?.name === 'West mirror down' && G.objState.collected.size === 1);
+  check('door will not close on you', !shut('dW'));
+  teleport(-20, 20); await waitSim(.4);
+  check('...and seals once you step through', shut('dW'));
+  await waitSim(10.5);
+  check('west hall purged with halon', P.purgeW.heat() === 1);
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; await waitSim(1);
+  check('halon hurts; tint goes blue', G.local.health < 100 && document.getElementById('heatTint').classList.contains('halon'), G.local.health.toFixed(0));
+  godMode();
+
+  // Retry from the checkpoint: doors as rerouted, the west node still down.
+  G.local.health = 100; G.local.protectUntil = 0; G.protectUntil = 0; hurt(G.local, 500, null); G.local.protectUntil = 0; hurt(G.local, 500, null); await frames(2);
+  await click('retryBtn'); godMode(); await frames(3);
+  check('retry: west node down, rerouted doors kept', G.props.nodeW.style === 'wrecked' && !G.props.dN.mover.enabled && G.props.dW.mover.enabled && G.objState.collected.size === 1);
+  for (const e of G.enemies) if (!e.dead) damageEnemy(e, 1e6, false, G.local);
+  const N = G.props.nodeN, n0 = G.enemies.length;
+  damageProp(N, N.maxHp * .55); await waitSim(.3);
+  check('north node at half -> Linemen', G.fired.has('n-half') && G.enemies.length > n0);
+  damageProp(N, 1e6); teleport(0, 20); await waitSim(.5);
+  check('north node down -> east opens, north seals', !G.props.dE.mover.enabled && !G.props.dNE.mover.enabled && G.props.dWN.mover.enabled && G.props.dN.mover.enabled, S().objective);
+  teleport(26, 10); damageProp(G.props.nodeE, 1e6); await waitSim(.5);
+  check('all three down -> back to the atrium', S().objective === 1 && G.checkpoint?.name === 'Mirrors destroyed', S().objective);
+  teleport(0, 20); await waitSim(3);
+  check('atrium reached -> mission won', S().status === 'won', S().status);
+
+  // Replay and let the copy finish: mission fails.
+  await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode(); await frames(3);
+  G.objState.t = 299.7; await waitSim(3);
+  check('copy completes -> mission failed', S().status === 'lost', S().status);
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -926,7 +977,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17 };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18 };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -954,6 +1005,7 @@ async function run() {
   await mission15();
   await mission16();
   await mission17();
+  await mission18();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

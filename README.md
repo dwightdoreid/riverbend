@@ -19,8 +19,8 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 279 scripted solo checks (missions 01–17 + spawn safety) in headless Chrome
-python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m17), much faster
+python3 tools/smoke_test.py                  # 298 scripted solo checks (missions 01–18 + spawn safety) in headless Chrome
+python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m18), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
 python3 tools/smoke_test.py --screenshot shot.png
@@ -67,7 +67,7 @@ src/
   net/net.js          co-op session: lobby, snapshots, events, host/client roles
   net/transport.js    PeerJS (online) and BroadcastChannel (same-browser) connections
   ui/hud.js, menu.js  HUD, team panel, minimap, objective marker, menus, co-op lobby
-  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker, caverns) and reusable pieces (kit.js).
+  levels/             level geometry (riverbend, switchback, fernhill, calder, portcalder, tunnels, kelso, viaduct, railyard (+ snow variant), galeline, ridge, office, peaker, caverns, datahalls) and reusable pieces (kit.js).
                       Levels may define `zones` (water: slow, noisy wading) and `map.rects` (minimap floor areas).
                       Lights added inside a level's build() are kept (e.g. Calder's turbine-hall lamps).
   missions/           mission definitions plus the campaign order (index.js)
@@ -91,7 +91,7 @@ Missions are plain data. Copy a file in `src/missions/`, change its contents, th
 - **turrets**: how many auto-turrets each player carries (T to deploy). The `giveTurrets` event hands out more.
 - **loadout**: guns available, in key order. Defaults to `['rifle', 'pistol']`; the options are `rifle`, `shotgun`, `dmr`, `arc` (stuns and chains between machines) and `pistol`.
 - **spawns**: `[x, z, yaw]`, one per co-op slot.
-- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `camera` (stealth missions), `gasTurbine`, `vent`, `valve`, `heatZone`, `truck`, `train`, `battery` (a wagon shunted to `to` once coupled), `turbine`, `relay`, `beacon` (light column landmark), `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
+- **props**: named objects. Types: `terminal`, `extraction`, `survivor`, `panel`, `floodlight`, `camera` (stealth missions), `gasTurbine`, `vent`, `valve`, `heatZone`, `mirrorNode`, `truck`, `train`, `battery` (a wagon shunted to `to` once coupled), `turbine`, `relay`, `beacon` (light column landmark), `barricade`, `lever`, `door` (`open` clears it), `drive`, `payphone`, `cable`, `mimic` (a live breaker diagram) and `marker` (an invisible target point). Each has a `style` that events can change (`gone` removes a truck or barricade). There's also a `generator` type.
 - **Prop health:** any prop with a collision body can take `hp`. Machine fire damages it, players hold E next to it to repair it (`repairable`, default true), and `onDestroyed` events run when it's lost. `label` names it in the HUD. With `downStyle` (e.g. `'offline'`) and `upStyle`, zero health knocks the prop out instead of destroying it, and players hold E next to it to reboot it at half health.
 - **escort**: `{ prop, path: [[x, z]...], speed, radius, contactRadius, blockAhead, hp, onDestroyed }`. The vehicle drives the path during `escort` objectives.
 - **pickups**: `[x, z, 'ammo' | 'med']`.
@@ -164,3 +164,9 @@ during one objective.
 players and machines inside. A `heatZone` prop (`rect`, `valves`, `dps`) scalds players in proportion
 to how many of its valves are still closed (`valve` props, styles `closed`/`open`). Damage runs on
 the host in `src/game/heat.js`.
+
+### Destroy objectives and rerouting (mission 18)
+`type: 'destroy'` completes when every prop in `targets` is wrecked, running `onEach`/`onTarget` as each
+falls. Props with `hp` and `shootable: true` take damage from players' rounds and blasts instead of
+machine fire. Doors never close on anyone standing in them. A `heatZone` with `kind: 'halon'` and no
+valves is switched with styles `on`/`off`. Triggers can watch `propHp: [id, fraction]`.

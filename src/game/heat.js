@@ -25,7 +25,8 @@ export function updateHeat(dt) {
     } else if (v.type === 'heatZone') {
       const k = v.heat(); if (!k) continue;
       for (const p of G.players) if (isActive(p) && inRect(p.pos, v.rect)) {
-        hurt(p, (G.mission.props.find(d => d.id === v.id).dps ?? 30) * k * step, null); tell(p, 'Superheated air! Open the bypass valves.', 1.2);
+        const def = G.mission.props.find(d => d.id === v.id);
+        hurt(p, (def.dps ?? 30) * k * step, null); tell(p, def.kind === 'halon' ? 'Halon purge! Get out of the hall.' : 'Superheated air! Open the bypass valves.', 1.2);
       }
     }
   }

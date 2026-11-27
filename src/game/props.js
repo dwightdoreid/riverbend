@@ -5,6 +5,7 @@ import { box, cyl, rod, geo, mesh, glowMats } from '../engine/builders.js';
 import { G } from './state.js';
 import { addMover, block, addSolid } from './world.js';
 import { sound } from '../engine/audio.js';
+import { showHit } from '../ui/hud.js';
 import { districtLit } from './blackout.js';
 import { burst } from './combat.js';
 import { runEvents } from './mission.js';
@@ -201,9 +202,15 @@ const PROP_TYPES = {
     const openMat = emissive(0x5ce08a, 1.4), shutMat = lamp.material;
     return {
       root, mover, pos: new THREE.Vector3(x, 1.4, z),
-      setStyle(s) { const open = s === 'open'; g.visible = !open; mover.enabled = !open; lamp.material = open ? openMat : shutMat; },
-      update() {},
+      // A door never closes on someone standing in it: it waits until the doorway is clear.
+      setStyle(s) { if (s === 'open') apply(true); else if (!blocked()) apply(false); },
+      update() { if (this.style !== 'open' && !g.visible && !blocked()) apply(false); },
     };
+    function apply(open) { g.visible = !open; mover.enabled = !open; lamp.material = open ? openMat : shutMat; }
+    function blocked() {
+      const near = q => Math.hypot(q.pos.x - x, q.pos.z - z) < w / 2 + 1;
+      return G.players.some(p => p.alive && near(p)) || G.enemies.some(e => !e.dead && near(e));
+    }
   },
 
   // A courier case left as a dead drop, with a blinking status LED. Style 'gone' once taken.
@@ -494,25 +501,59 @@ const PROP_TYPES = {
     };
   },
 
+  // LODESTAR mirror node: a glass column of rising data with spinning rings. Shot by players
+  // (def.shootable): bullets and blasts wear down its hp. Styles 'copying' and 'wrecked'.
+  mirrorNode(parent, def) {
+    const [x, z] = def.at, root = new THREE.Group(); parent.add(root);
+    const glass = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x2fa8d8, emissiveIntensity: .9, transparent: true, opacity: .55, roughness: .1 });
+    const dead = new THREE.MeshStandardMaterial({ color: 0x2a2e30, roughness: .9 });
+    box(root, x, .3, z, 3.4, .6, 3.4, 'edge'); box(root, x, 5.6, z, 3, .4, 3, 'edge');
+    const col = cyl(root, x, 3, z, 1.05, 1.05, 4.8, glass, 18);
+    const data = [];
+    for (let i = 0; i < 6; i++) data.push(cyl(root, x, 1 + i * .8, z, .8, .8, .08, emissive(0xbff4ff, 2.2), 16));
+    const rings = [];
+    for (let i = 0; i < 3; i++) { const r = mesh(root, geo('torus', 1.6 + i * .15, .05, 6, 28), emissive(0x7fdcff, 1.6), x, 1.6 + i * 1.6, z); r.rotation.x = Math.PI / 2; rings.push(r); }
+    const circles = [{ x, z, r: 1.7 }];
+    const mover = addMover({ circles, box: new THREE.Box3(new THREE.Vector3(x - 1.5, 0, z - 1.5), new THREE.Vector3(x + 1.5, 5.8, z + 1.5)) });
+    const light = new THREE.PointLight(0x7fdcff, 10, 16, 1.6); light.position.set(x, 3, z); root.add(light);
+    const prop = {
+      root, mover, pos: new THREE.Vector3(x, 2.6, z),
+      setStyle(s) {
+        const w = s === 'wrecked'; col.material = w ? dead : glass; light.intensity = w ? 0 : 10;
+        for (const d of data) d.visible = !w; for (const r of rings) r.visible = !w;
+      },
+      update(t) {
+        if (prop.style === 'wrecked') return;
+        const hurt = prop.maxHp ? 1 - prop.hp / prop.maxHp : 0;
+        data.forEach((d, i) => { d.position.y = .6 + ((t * 1.4 + i * .8) % 4.8); });
+        rings.forEach((r, i) => { r.rotation.z = t * (1 + i * .6) * (i % 2 ? -1 : 1); r.rotation.y = Math.sin(t + i) * .2; });
+        glass.emissiveIntensity = .9 + (hurt > .5 && Math.sin(t * 20) > 0 ? .8 : 0);
+      },
+    };
+    return prop;
+  },
+
   // A superheated passage: hot haze and glowing floor whose strength is the fraction of
   // def.valves still closed. heat.js scalds players inside it on the host.
   heatZone(parent, def) {
     const [x0, z0, x1, z1] = def.rect, root = new THREE.Group(); parent.add(root);
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, d = z1 - z0;
-    const floor = new THREE.MeshStandardMaterial({ color: 0x3a1a10, emissive: 0xff5a1a, emissiveIntensity: 1 });
+    const halon = def.kind === 'halon';
+    const floor = new THREE.MeshStandardMaterial({ color: halon ? 0x1a2a3a : 0x3a1a10, emissive: halon ? 0x9fd0ff : 0xff5a1a, emissiveIntensity: 1 });
     for (let z = z0 + 1.5; z < z1; z += 3) box(root, cx, .03, z, w * .7, .05, .5, floor).castShadow = false;
-    const light = new THREE.PointLight(0xff6a2a, 0, Math.max(w, d) * .9, 1.4); light.position.set(cx, 3, cz); root.add(light);
+    const light = new THREE.PointLight(halon ? 0xff3a3a : 0xff6a2a, 0, Math.max(w, d) * .9, 1.4); light.position.set(cx, 3, cz); root.add(light);
     const prop = {
       root, pos: new THREE.Vector3(cx, 1, cz), rect: def.rect,
       setStyle() {},
-      heat: () => (def.valves ?? []).filter(id => G.props[id]?.style !== 'open').length / Math.max(1, (def.valves ?? []).length),
+      // With valves: the fraction still closed. Without (halon purge): on or off by style.
+      heat: () => def.valves ? def.valves.filter(id => G.props[id]?.style !== 'open').length / def.valves.length : prop.style === 'on' ? 1 : 0,
       update(t) {
         const k = prop.heat();
         // Inside the heat the screen tints and shimmers (local player only).
         const me = G.local, inside = me && me.pos.x >= x0 && me.pos.x <= x1 && me.pos.z >= z0 && me.pos.z <= z1;
         const tint = document.getElementById('heatTint');
-        if (tint && (inside || tint.dataset.zone === def.id)) { tint.dataset.zone = inside && k ? def.id : ''; tint.style.opacity = inside ? (k * (.45 + Math.sin(t * 7) * .08)).toFixed(3) : 0; }
-        floor.emissiveIntensity = .15 + k * 1.6; light.intensity = k * 14;
+        if (tint && (inside || tint.dataset.zone === def.id)) { tint.dataset.zone = inside && k ? def.id : ''; tint.classList.toggle('halon', halon); tint.style.opacity = inside ? (k * (.45 + Math.sin(t * 7) * .08)).toFixed(3) : 0; }
+        floor.emissiveIntensity = .15 + k * (halon ? .35 : 1.6); light.intensity = k * 14;
       },
     };
     return prop;
@@ -566,7 +607,7 @@ const PROP_TYPES = {
   },
 };
 
-const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold', vent: 'active', valve: 'closed', heatZone: 'on' };
+const DEFAULT_STYLE = { terminal: 'amber', extraction: 'idle', survivor: 'present', panel: 'off', floodlight: 'off', truck: 'present', barricade: 'present', generator: 'running', door: 'closed', train: 'present', drive: 'present', payphone: 'idle', marker: 'idle', cable: 'live', mimic: 'idle', lever: 'normal', turbine: 'braked', relay: 'idle', beacon: 'on', battery: 'parked', camera: 'on', gasTurbine: 'cold', vent: 'active', valve: 'closed', heatZone: 'on', mirrorNode: 'copying' };
 
 export function spawnProps(defs) {
   G.props = {};
@@ -581,7 +622,8 @@ export function spawnProps(defs) {
       p.maxHp = p.hp = def.hp * (1 + .3 * (G.players.length - 1));
       p.repairable = def.repairable ?? true;
       p.downStyle = def.downStyle ?? null; p.upStyle = def.upStyle ?? null;   // knocked out (rebootable) instead of destroyed
-      p.mover.onHit = (dmg, hostile) => { if (hostile) damageProp(p, dmg); };
+      p.shootable = !!def.shootable;   // LODESTAR's own hardware: players shoot it, machines don't
+      p.mover.onHit = (dmg, hostile) => { if (!!hostile !== p.shootable) { damageProp(p, dmg); if (p.shootable && !hostile && G.players.length === 1) showHit(p.style === 'wrecked'); } };
     }
   }
 }

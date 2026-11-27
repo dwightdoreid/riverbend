@@ -172,7 +172,7 @@ const flat = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 /** Prop ids the current objective points at (remaining ones, for collect objectives). */
 export function objectiveTargets(o = currentObjective()) {
   if (!o) return [];
-  if (o.type === 'collect') return o.targets.filter(t => !G.objState.collected.has(t));
+  if (o.type === 'collect' || o.type === 'destroy') return o.targets.filter(t => !G.objState.collected.has(t));
   if (o.type === 'uplink') { const down = o.targets.filter(t => G.props[t].style !== (o.onlineStyle ?? 'online')); return down.length ? down : o.targets; }
   return o.target ? [o.target] : [];
 }
@@ -192,7 +192,8 @@ export function objectivePosFor(p) {
 export function objectiveText() {
   const o = currentObjective(); if (!o) return null;
   let name = o.name, sub = o.sub ?? '';
-  if (o.type === 'collect') name += ` (${G.objState.collected.size}/${o.targets.length})`;
+  if (o.type === 'collect' || o.type === 'destroy') name += ` (${G.objState.collected.size}/${o.targets.length})`;
+  if (o.type === 'destroy') sub = (o.sub ? o.sub + ' · ' : '') + o.targets.map(id => (G.props[id].label ?? id) + ' ' + (G.props[id].style === 'wrecked' ? '✕' : Math.ceil(G.props[id].hp / G.props[id].maxHp * 100) + '%')).join('  ');
   if (o.type === 'hold') sub += ` · ${Math.floor(Math.min(1, G.objState.hold / o.time) * 100)}%`;
   if (o.type === 'survive') {
     const left = Math.max(0, Math.ceil(o.time - G.objState.hold));
@@ -268,6 +269,17 @@ export function updateObjective(dt) {
     const up = o.targets.filter(id => G.props[id].style === (o.onlineStyle ?? 'online')).length;
     G.objState.hold += dt * up / o.targets.length;
     if (G.objState.hold >= o.time) completeObjective(alive[0] ?? G.local);
+  } else if (o.type === 'destroy') {
+    // Props the players must wreck (shootable hardware). onEach/onTarget run as each one falls.
+    for (const id of o.targets) if (G.props[id].style === 'wrecked' && !G.objState.collected.has(id)) {
+      G.objState.collected.add(id);
+      const n = G.objState.collected.size, total = o.targets.length;
+      const fill = ev => Object.fromEntries(Object.entries(ev).map(([k, v]) => [k, typeof v === 'string' ? v.replaceAll('{n}', n).replaceAll('{total}', total) : v]));
+      runEvents([...(o.onEach ?? []), ...(o.onTarget?.[id] ?? [])].map(fill));
+      if (G.status !== 'playing') return;
+      if (n >= total) { completeObjective(alive[0] ?? G.local); return; }
+      updateHUD();
+    }
   } else if (o.type === 'switching') {
     if (goalReached()) completeObjective(alive[0] ?? G.local);
   } else if (o.type === 'survive') {
@@ -347,6 +359,7 @@ const CONDITIONS = {
   breaker: ([id, closed]) => !!G.mission.switching && isClosed(id) === closed,
   enemyHp: ([tag, frac]) => G.enemies.some(e => e.def.tag === tag && (e.dead || e.hp <= e.maxHp * frac)),
   collected: n => G.objState.collected.size >= n,
+  propHp: ([id, frac]) => !!G.props[id]?.maxHp && G.props[id].hp <= G.props[id].maxHp * frac,
   enemiesLeft: n => G.elapsed > 1 && G.enemies.filter(e => !e.dead).length <= n,
   escort: i => !!G.escort && G.escort.s >= G.escort.cum[Math.min(i, G.escort.cum.length - 1)] - .01,
 };

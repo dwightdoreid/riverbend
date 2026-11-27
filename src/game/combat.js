@@ -10,6 +10,7 @@ import { feed, showHit, showDamage } from '../ui/hud.js';
 import { isHost, fxAll, fxTo } from '../net/net.js';
 import { windVec } from './weather.js';
 import { finish } from './flow.js';
+import { damageProp } from './props.js';
 
 const bulletMat = new THREE.MeshBasicMaterial({ color: 0xffe6a5 }), hostileMat = new THREE.MeshBasicMaterial({ color: 0xfc7655 }), arcMat = new THREE.MeshBasicMaterial({ color: 0x9fe0ff });
 const fxGeo = geo('box', 1, 1, 1), fxMats = {};
@@ -344,6 +345,11 @@ function explode(b) {
     if (!isActive(pl)) continue;
     const eye = eyeOf(pl), d = eye.distanceTo(p);
     if (d < radius && los(lift, eye)) hurt(pl, (he ? 95 : 115) * (1 - d / radius), p);
+  }
+  for (const q of Object.values(G.props)) {
+    if (!q.shootable || !q.hp || q.style === 'wrecked') continue;
+    const d = Math.max(0, q.pos.distanceTo(p) - 1.5);
+    if (d < radius) damageProp(q, (he ? 210 : 150) * (1 - d / radius));
   }
   alertNoise(p, 55);
   b.g.removeFromParent();
