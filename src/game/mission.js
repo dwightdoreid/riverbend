@@ -16,6 +16,7 @@ import { setupSwitching, breakerNear, operate, isClosed, goalReached } from './s
 import { setupWeather } from './weather.js';
 import { setupStealth, raiseAlarm } from './stealth.js';
 import { diff } from './difficulty.js';
+import { stinger } from './soundtrack.js';
 import { setupSync, stepPoints, stepGrid, allHeld, syncPoints, loadStep } from './sync.js';
 import { damageEnemy } from './combat.js';
 import { spawnEnemies, addEnemy, snapshotEnemies, restoreEnemies } from './bots.js';
@@ -67,7 +68,7 @@ function loadLevel(level) {
 export function prepareMission(mission, checkpoint = null) {
   const level = LEVELS[mission.level];
   loadLevel(level);
-  G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}) };
+  G.env = { ...level.environment, ...ENV_PRESETS[mission.environment ?? 'day'], ...(mission.environmentOverrides ?? {}), name: mission.environment ?? 'day' };
   applyEnvironment(G.env);
   clearCombat(); clearRadio(); clearTurrets(); clearBossFx(); resetBlackout(); clearSmokes();
   if (G.dynRoot) G.dynRoot.removeFromParent();
@@ -416,7 +417,7 @@ function takeCheckpoint(name = 'Checkpoint') {
     })),
   };
   for (const p of G.players) p.stims = diff().stims;
-  feed('Checkpoint · ' + name);
+  feed('Checkpoint · ' + name); stinger('checkpoint');
   sound('objective', .5);
   onCheckpoint();   // co-op: players waiting to drop in join now
 }

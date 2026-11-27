@@ -1,6 +1,7 @@
 // Game flow: mission select, deploy, pause, resume, checkpoint retry, win/lose.
 // In co-op the host drives the flow and clients follow via network hooks.
 import { earnedMedals } from './medals.js';
+import { startSoundtrack, stinger } from './soundtrack.js';
 import { G } from './state.js';
 import { initAudio, sound } from '../engine/audio.js';
 import { prepareMission, beginPlay } from './mission.js';
@@ -12,7 +13,7 @@ import { CAMPAIGN } from '../missions/index.js';
 import { net, isHost, isClient, inCoop, activateRoster, sendStart, broadcastBrief, broadcastFinish, resetNetVisuals } from '../net/net.js';
 
 function enterPlay(fresh) {
-  initAudio();
+  initAudio(); startSoundtrack();
   G.status = 'playing'; G.overlay = false;
   clearInput(); showPlaying(); requestMouse();
   if (isClient()) { if (fresh && G.mission.intro) say(G.mission.intro.text, G.mission.intro.time); }
@@ -58,7 +59,7 @@ export function finish(won) {
   G.status = won ? 'won' : 'lost'; G.overlay = false;
   if (won) { G.medals = earnedMedals(); G.newMedals = recordWin(G.missionIndex, G.mission.id, G.elapsed, G.medals); }
   if (isHost()) broadcastFinish(won);
-  clearInput(); releaseMouse(); showFinish(won); sound('objective');
+  clearInput(); releaseMouse(); showFinish(won); sound('objective'); stinger(won ? 'win' : 'fail');
 }
 
 export function selectMission(i) {
@@ -89,7 +90,7 @@ net.hooks.onFinish = won => {
   if (G.status !== 'playing') return;
   G.status = won ? 'won' : 'lost'; G.overlay = false;
   if (won) { G.medals = earnedMedals(); G.newMedals = recordWin(G.missionIndex, G.mission.id, G.elapsed, G.medals); }
-  clearInput(); releaseMouse(); showFinish(won); sound('objective');
+  clearInput(); releaseMouse(); showFinish(won); sound('objective'); stinger(won ? 'win' : 'fail');
 };
 net.hooks.onLeave = () => {
   const i = G.missionIndex;

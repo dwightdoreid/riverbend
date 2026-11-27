@@ -14,8 +14,11 @@ export function sfxFor(p, kind, level = 1) {
 
 /** A sound at a world position, attenuated by distance to the local player. */
 export function sfxAt(pos, kind, level = 1, falloff = 85, floor = .02) {
-  if (!G.local) return;
-  sound(kind, level * Math.max(floor, 1 - G.local.pos.distanceTo(pos) / falloff));
+  const me = G.local; if (!me) return;
+  const dx = pos.x - me.pos.x, dz = pos.z - me.pos.z, d = Math.hypot(dx, dz);
+  // Stereo position from where it is relative to where you're facing; distance muffles it.
+  const pan = d > .5 ? (dx * Math.cos(me.yaw) - dz * Math.sin(me.yaw)) / d * .8 : 0;
+  sound(kind, level * Math.max(floor, 1 - me.pos.distanceTo(pos) / falloff), pan, { muffle: Math.min(1, d / falloff) * .85 });
 }
 
 /** A toast shown only to player p. */

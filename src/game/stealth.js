@@ -12,6 +12,7 @@ import { sound } from '../engine/audio.js';
 import { feed } from '../ui/hud.js';
 import { runEvents } from './mission.js';
 import { isClient } from '../net/net.js';
+import { stinger } from './soundtrack.js';
 
 export const DETECT_FULL = 1.2;
 const cfg = () => G.mission?.stealth;
@@ -31,7 +32,7 @@ export function cameraSees(c, p) {
 export function raiseAlarm(reason = 'Alarm raised!') {
   const S = G.stealth; if (!S || S.alarm) return;
   S.alarm = true; S.meter = DETECT_FULL; S.waveT = cfg().waves?.every ?? 30;
-  feed('ALARM · ' + reason); sound('hurt', 1.2);
+  feed('ALARM · ' + reason); sound('hurt', 1.2); stinger('alarm');
   runEvents(cfg().onAlarm);
   for (const e of G.enemies) if (!e.dead && e.def.guard) { e.hunt = true; e.memory = Math.max(e.memory, 10); }
 }

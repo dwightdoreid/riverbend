@@ -1164,6 +1164,46 @@ async function phase4a() {
   D.setDifficulty('operator');
 }
 
+async function phase4b() {
+  const T = await import('../src/game/soundtrack.js'), A = await import('../src/engine/audio.js'), flow = await import('../src/game/flow.js');
+  const st = () => T.soundtrackState();
+  flow.selectMission(0); await frames(3); await click('startBtn'); godMode(); await frames(3);
+  check('audio running; soundtrack on in the day mood', A.audioCtx()?.audio.state === 'running' && st().on && st().mood === 'day', A.audioCtx()?.audio.state + ' ' + st().mood);
+  for (const e of G.enemies) { e.dead = true; e.g.visible = false; }
+  await waitSim(6);
+  check('quiet: calm layers only (pad and soft bass)', st().intensity === 0 && st().layers.pad === 1 && st().layers.drums === 0 && st().layers.arp === 0, JSON.stringify(st().layers));
+  const n0 = st().notes; await new Promise(r => setTimeout(r, 3500));   // the sequencer runs on the audio clock (real time)
+  check('the sequencer keeps playing', st().notes > n0, st().notes - n0);
+  const e = addEnemy({ type: 'sentry', at: [G.local.pos.x + 10, G.local.pos.z] }); e.state = 'engage'; e.visible = true;
+  await waitSim(.3, () => { e.state = 'engage'; e.visible = true; });
+  check('a machine engaging nearby: combat layers in', st().intensity === 2 && st().layers.drums === 1 && st().layers.arp > .5, JSON.stringify(st().layers));
+  damageEnemy(e, 1e6, false, G.local); G.simSteps = 10; await waitSim(14); G.simSteps = 6;
+  check('...and they fade back once it is quiet', st().intensity === 0, st().intensity);
+  const w = addEnemy({ type: 'warden', at: [G.local.pos.x + 20, G.local.pos.z] }); await waitSim(.4);
+  check('a boss nearby: boss layers (lead line)', st().intensity === 3 && st().layers.lead > 0, JSON.stringify(st().layers));
+  damageEnemy(w, 1e7, false, G.local, { explosive: true }); w.dead = true;
+  const n1 = st().notes; (await import('../src/game/mission.js')).runEvents([{ do: 'checkpoint', name: 'audio test' }]);
+  check('checkpoint stinger plays', st().notes >= n1 + 4, st().notes - n1);
+  // Footsteps follow the local player.
+  const s0 = st().steps, x0 = G.local.pos.x; let k = 0;
+  G.simSteps = 1; await waitSim(3, () => { G.local.pos.x = x0 + Math.sin(k++ * .08) * 2.5; }); G.simSteps = 6;   // pace back and forth in the open, one sim step per frame
+  check('footsteps while moving', st().steps > s0 + 2, st().steps - s0);
+  // Environment: underground tunnels have reverb, drips and no wind; the core chamber hums.
+  flow.selectMission(6); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
+  await new Promise(r => setTimeout(r, 1500));   // the reverb glides to its new level in real time
+  check('mission 07: underground mood, no wind, big reverb', st().mood === 'underground' && st().beds.wind < .05 && A.audioCtx().bus.wet.gain.value > .3, st().mood + ' ' + st().beds.wind + ' ' + A.audioCtx().bus.wet.gain.value.toFixed(2));
+  flow.selectMission(10); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
+  check('mission 11: storm mood, wind and rain beds', st().mood === 'storm' && st().beds.wind > .2 && st().beds.rain > .2, JSON.stringify(st().beds));
+  flow.selectMission(19); await frames(3); await click('startBtn'); godMode(); await waitSim(2);
+  check('mission 20: grid hum in the core chamber', st().beds.hum > .04, st().beds.hum);
+  // Volume settings persist.
+  const mv = document.getElementById('musicVolume'); mv.value = .2; mv.dispatchEvent(new Event('input'));
+  check('music volume saved', JSON.parse(localStorage.getItem('riverbend.audio')).music === .2 && Math.abs(A.audioCtx().bus.music.gain.value - .2) < .01);
+  mv.value = .4; mv.dispatchEvent(new Event('input'));
+  flow.finish(true); await frames(3);
+  check('scorecard: drums out, pad stays', st().layers.drums === 0 && st().layers.pad > 0, JSON.stringify(st().layers));
+}
+
 async function run() {
   G.simSteps = 6;
   try { localStorage.removeItem('riverbend.progress.v1'); } catch { /* ignore */ }
@@ -1171,7 +1211,7 @@ async function run() {
   document.getElementById('quality').dispatchEvent(new Event('change'));
   if (ONLY === 'spawns') { await spawnSafety(); }
   else if (ONLY) {
-    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20, p4a: phase4a };
+    const fns = { m03: mission03, m04: mission04, m05: mission05, m06: mission06, m07: mission07, m08: mission08, m09: mission09, m10: mission10, m11: mission11, m12: mission12, m13: mission13, m14: mission14, m15: mission15, m16: mission16, m17: mission17, m18: mission18, m19: mission19, m20: mission20, p4a: phase4a, p4b: phase4b };
     await fns[ONLY]();
   }
   if (ONLY) {
@@ -1203,6 +1243,7 @@ async function run() {
   await mission19();
   await mission20();
   await phase4a();
+  await phase4b();
 
   // Leave the game running for the CDP real-mouse check in smoke_test.py.
   await click(document.getElementById('replayBtn') ? 'replayBtn' : 'restartBtn'); godMode();

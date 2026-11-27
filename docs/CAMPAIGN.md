@@ -159,4 +159,5 @@ There are 13 environments, and some are reused with different lighting or layout
      - Done: 20 *Blackstart*: the LODESTAR Core boss (capacitor shield, arc sweep), Halvard's override port, and the shutdown / restore ending choice. **Campaign complete.**
 5. **In progress: Phase 4, polish.**
    - Done: 4a, difficulty (Recruit / Operator / Lineman) and medals (Swift, Marksman, Untouched, Hardened).
-   - Next: 4b music and audio; 4c effects; 4d mobile performance; 4e balancing (including par times).
+   - Done: 4b, music and audio: adaptive procedural soundtrack, ambience beds, positional effects, footsteps.
+   - Next: 4c effects; 4d mobile performance; 4e balancing (including par times).

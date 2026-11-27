@@ -19,7 +19,7 @@ No build step, no npm. Three.js r160 is bundled in `vendor/`.
 ## Test it
 
 ```bash
-python3 tools/smoke_test.py                  # 349 scripted solo checks (missions 01–20, phase 4 features + spawn safety) in headless Chrome
+python3 tools/smoke_test.py                  # 362 scripted solo checks (missions 01–20, phase 4 features + spawn safety) in headless Chrome
 python3 tools/smoke_test.py --url-args "&only=m11"   # just one mission's checks (m03–m20), much faster
 python3 tools/smoke_test.py --url-args "&only=spawns" # every mission: spawns clear + player can walk away
 python3 tools/coop_test.py                   # 36 co-op checks: host + client windows
@@ -202,3 +202,12 @@ store player stats so a retry can't wipe the damage taken. `&only=p4a` runs thes
 - Door props take `lastExit: { room, others }`: when every other door out of `room` is closed, the door
   stays (or reopens) open while a player is inside, so a reroute or checkpoint restore can't seal
   anyone in (mission 18's hall W).
+
+### Music and audio (phase 4b)
+All procedural Web Audio, no files. `src/engine/audio.js` has sfx / music / ambience buses (volumes
+saved; Audio and Music sliders in settings), a reverb send, stereo position and distance muffling for
+world sounds, and footsteps, ricochets and explosion rumble. `src/game/soundtrack.js` is an adaptive
+sequencer: pad, bass, arpeggio, hats, drums and a boss lead cross-fade with intensity (calm, tension,
+combat, boss) in a mood per environment (key, scale, tempo, timbre; `mission.music` overrides), with
+stingers for checkpoints, the alarm, wins and losses. Ambience beds: wind, rain, the 50 Hz grid hum
+near equipment, cave drips; reverb per level. `&only=p4b` runs these checks alone.

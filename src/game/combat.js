@@ -138,6 +138,7 @@ export function burst(pos, color, count = 7, power = 1) {
 
 function impact(p) {
   burst(p, 0xe3cb9b, 3, 1.4);
+  if (Math.random() < .3) sfxAt(p, 'ricochet', .7, 28, 0);
   if (G.decals.length > 28) { const old = G.decals.shift(); old.removeFromParent(); old.material.dispose(); }
   const m = new THREE.Mesh(geo('sphere', .045, 5, 4), new THREE.MeshBasicMaterial({ color: 0x3e4540 }));
   m.position.copy(p); G.dynRoot.add(m); G.decals.push(m);
@@ -241,7 +242,7 @@ export function explosionFx(p) {
   const light = new THREE.PointLight(0xffb75a, 10, 15, 2); light.position.copy(p); G.dynRoot.add(light); G.effects.push({ light, life: .14, total: .14 });
   const ring = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffb95a, transparent: true, opacity: .3, wireframe: true }));
   ring.position.copy(p); G.dynRoot.add(ring); G.effects.push({ ring, life: .32, total: .32 });
-  sfxAt(p, 'blast', 1, 85, .15);
+  sfxAt(p, 'explode', 1, 90, .15);
 }
 
 // ---------------------------------------------------------------- arc carbine

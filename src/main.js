@@ -1,7 +1,7 @@
 // Entry point: wires modules together and runs the frame loop.
 import { $ } from './engine/dom.js';
 import { renderer, camera, canvas, setQuality, resize, renderFrame, flashlight, FLASHLIGHT_INTENSITY } from './engine/render.js';
-import { setVolume } from './engine/audio.js';
+import { setVolume, setMusicVolume, volumes, sound } from './engine/audio.js';
 import { G } from './game/state.js';
 import { createPlayer, updatePlayer } from './game/players.js';
 import { WEAPONS } from './game/weapons.js';
@@ -21,6 +21,7 @@ import { updateSwitching } from './game/switching.js';
 import { updateWeather } from './game/weather.js';
 import { updateStealth } from './game/stealth.js';
 import { updateHeat } from './game/heat.js';
+import { updateSoundtrack } from './game/soundtrack.js';
 import { isClient, netTick, interpolate, updateRemotePlayers } from './net/net.js';
 import { setupInput, sampleInput, settings } from './input.js';
 
@@ -36,7 +37,10 @@ selectMission(0);
 $('pauseBtn').onclick = pause;
 $('controlsBtn').onclick = () => { $('menuControls').style.display = $('menuControls').style.display === 'block' ? 'none' : 'block'; };
 $('sensitivity').oninput = e => { settings.sensitivity = +e.target.value; };
+$('volume').value = volumes().master; $('musicVolume').value = volumes().music;
 $('volume').oninput = e => setVolume(+e.target.value);
+$('musicVolume').oninput = e => setMusicVolume(+e.target.value);
+document.addEventListener('click', e => { if (e.target.closest?.('#screen button')) sound('click'); });   // menu feedback
 $('quality').onchange = e => setQuality(e.target.value);
 setQuality('medium');
 setupInput();
@@ -96,6 +100,7 @@ let last = performance.now();
 function tick(now) {
   requestAnimationFrame(tick);
   const dt = Math.min((now - last) / 1000, .05); last = now;
+  updateSoundtrack(dt);   // music and ambience follow every state (menus, play, scorecard)
   if (G.status === 'playing') {
     for (let i = 0; i < G.simSteps && G.status === 'playing'; i++) (isClient() ? clientStep : step)(dt);
     if (G.status === 'playing') {
